@@ -1,0 +1,11 @@
+tmp/
+target/
+.claude/
+.codegraph/
+Cargo.lock
+*.dll
+*.so
+*.dylib
+*.exe
+*.pdb
+CLAUDE.md
