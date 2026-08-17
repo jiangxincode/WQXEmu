@@ -1,0 +1,13 @@
+[package]
+name = "wqxemu-core"
+version.workspace = true
+edition.workspace = true
+description = "Platform-independent Wenquxing NC1020 hardware emulation core"
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+log.workspace = true
+serde.workspace = true
+bincode.workspace = true

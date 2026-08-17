@@ -1,0 +1,19 @@
+[package]
+name = "wqxemu"
+version.workspace = true
+edition.workspace = true
+description = "Standalone desktop frontend for WQXEmu"
+license.workspace = true
+
+[[bin]]
+name = "wqxemu"
+path = "src/main.rs"
+
+[dependencies]
+wqxemu-core.workspace = true
+anyhow.workspace = true
+log.workspace = true
+env_logger.workspace = true
+clap.workspace = true
+image.workspace = true
+minifb = "0.28"

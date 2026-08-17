@@ -1,0 +1,14 @@
+[package]
+name = "wqxemu-libretro"
+version.workspace = true
+edition.workspace = true
+description = "RetroArch/libretro core for WQXEmu"
+license.workspace = true
+
+[lib]
+name = "wqxemu_libretro"
+crate-type = ["cdylib"]
+
+[dependencies]
+wqxemu-core.workspace = true
+log.workspace = true
