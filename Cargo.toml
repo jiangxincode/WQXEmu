@@ -21,7 +21,7 @@ thiserror = "2"
 log = "0.4"
 env_logger = "0.11"
 serde = { version = "1", features = ["derive"] }
-bincode = "1"
+bincode = "3"
 image = { version = "0.25", default-features = false, features = ["png"] }
 clap = { version = "4", features = ["derive"] }
 
