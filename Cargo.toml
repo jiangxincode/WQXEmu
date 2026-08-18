@@ -11,7 +11,7 @@ default-members = ["crates/wqxemu"]
 version = "0.1.0"
 edition = "2021"
 description = "A deterministic, cross-platform emulator for Wenquxing NC1020 electronic dictionary"
-license = "BSD-3-Clause"
+license = "GPL-3.0-or-later"
 repository = "https://github.com/jiangxincode/WQXEmu"
 
 [workspace.dependencies]

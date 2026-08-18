@@ -111,7 +111,7 @@ impl Input {
         if pressed {
             if self.slept {
                 // Wake up on specific keys (F1-F9, not F10)
-                if key_id >= 0x08 && key_id <= 0x0F && key_id != 0x0E {
+                if (0x08..=0x0F).contains(&key_id) && key_id != 0x0E {
                     self.wake_up_key = match key_id {
                         0x08 => 0x00,
                         0x09 => 0x0A,
@@ -158,8 +158,14 @@ impl Input {
             }
             0x7F => {
                 // Scan all rows at once
-                self.matrix[0] | self.matrix[1] | self.matrix[2] | self.matrix[3] |
-                self.matrix[4] | self.matrix[5] | self.matrix[6] | self.matrix[7]
+                self.matrix[0]
+                    | self.matrix[1]
+                    | self.matrix[2]
+                    | self.matrix[3]
+                    | self.matrix[4]
+                    | self.matrix[5]
+                    | self.matrix[6]
+                    | self.matrix[7]
             }
             _ => 0xFF, // No key pressed
         }

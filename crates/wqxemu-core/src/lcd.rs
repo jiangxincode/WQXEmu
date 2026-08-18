@@ -76,7 +76,8 @@ impl Lcd {
         }
         let addr = self.lcd_addr as usize;
         if addr + LCD_BUFFER_SIZE <= ram.len() {
-            self.framebuffer.copy_from_slice(&ram[addr..addr + LCD_BUFFER_SIZE]);
+            self.framebuffer
+                .copy_from_slice(&ram[addr..addr + LCD_BUFFER_SIZE]);
             self.dirty = true;
             true
         } else {

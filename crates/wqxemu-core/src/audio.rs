@@ -70,18 +70,14 @@ impl Audio {
     /// Handle register 0x23 write (command)
     pub fn write_command(&mut self, data: u8, command: u8) {
         match command {
-            0xC2 => {
+            0xC2 if (self.wave_index as usize) < WAVE_BUFFER_SIZE => {
                 // Write single byte
-                if (self.wave_index as usize) < WAVE_BUFFER_SIZE {
-                    self.wave_buffer[self.wave_index as usize] = data;
-                }
+                self.wave_buffer[self.wave_index as usize] = data;
             }
-            0xC4 => {
+            0xC4 if (self.wave_index as usize) < WAVE_BUFFER_SIZE => {
                 // Write to buffer and advance
-                if (self.wave_index as usize) < WAVE_BUFFER_SIZE {
-                    self.wave_buffer[self.wave_index as usize] = data;
-                    self.wave_index += 1;
-                }
+                self.wave_buffer[self.wave_index as usize] = data;
+                self.wave_index += 1;
             }
             0x80 => {
                 // Play

@@ -14,11 +14,12 @@ use crate::flash::Flash;
 use crate::input::Input;
 use crate::io::IoHandler;
 use crate::lcd::{Lcd, CYCLES_PER_FRAME, LCD_HEIGHT, LCD_WIDTH};
-use crate::memory::{Memory, MemRegion, BANK_SIZE, IO_LIMIT, NOR_SIZE, RAM_SIZE, ROM_SIZE};
+use crate::memory::{MemRegion, Memory, BANK_SIZE, IO_LIMIT, NOR_SIZE, RAM_SIZE, ROM_SIZE};
 use crate::save::SaveState;
 use crate::timer::Timer;
 
 /// CPU cycles per millisecond at 5.12 MHz
+#[allow(dead_code)]
 const CYCLES_PER_MS: u32 = 5120;
 
 /// Main emulator struct
@@ -44,6 +45,7 @@ pub struct Emulator {
     /// Frame counter
     frame_count: u64,
     /// Whether the emulator is running
+    #[allow(dead_code)]
     running: bool,
     /// Speed-up mode
     speed_up: bool,
@@ -82,8 +84,8 @@ impl Emulator {
 
     /// Load ROM data from file
     pub fn load_rom(&mut self, path: &str) -> Result<()> {
-        let data = std::fs::read(path)
-            .with_context(|| format!("Failed to read ROM file: {}", path))?;
+        let data =
+            std::fs::read(path).with_context(|| format!("Failed to read ROM file: {}", path))?;
 
         if data.len() < ROM_SIZE {
             anyhow::bail!(
@@ -111,14 +113,26 @@ impl Emulator {
 
         // Debug: check ROM data at key offsets
         log::debug!("ROM[0x0000]: {:02X} {:02X}", self.rom[0], self.rom[1]);
-        log::debug!("ROM[0x2000]: {:02X} {:02X}", self.rom[0x2000], self.rom[0x2001]);
-        log::debug!("ROM[0x3FFC]: {:02X} {:02X} (reset vector)", self.rom[0x3FFC], self.rom[0x3FFD]);
+        log::debug!(
+            "ROM[0x2000]: {:02X} {:02X}",
+            self.rom[0x2000],
+            self.rom[0x2001]
+        );
+        log::debug!(
+            "ROM[0x3FFC]: {:02X} {:02X} (reset vector)",
+            self.rom[0x3FFC],
+            self.rom[0x3FFD]
+        );
         let rv = self.rom[0x3FFC] as u16 | (self.rom[0x3FFD] as u16) << 8;
         log::debug!("Reset vector: 0x{:04X}", rv);
         if (rv as usize) < self.rom.len() {
-            log::debug!("Code at reset vec: {:02X} {:02X} {:02X} {:02X}",
-                self.rom[rv as usize], self.rom[rv as usize + 1],
-                self.rom[rv as usize + 2], self.rom[rv as usize + 3]);
+            log::debug!(
+                "Code at reset vec: {:02X} {:02X} {:02X} {:02X}",
+                self.rom[rv as usize],
+                self.rom[rv as usize + 1],
+                self.rom[rv as usize + 2],
+                self.rom[rv as usize + 3]
+            );
         }
 
         // Initialize BBS pages from ROM
@@ -130,8 +144,8 @@ impl Emulator {
 
     /// Load NOR Flash data from file
     pub fn load_nor(&mut self, path: &str) -> Result<()> {
-        let data = std::fs::read(path)
-            .with_context(|| format!("Failed to read NOR file: {}", path))?;
+        let data =
+            std::fs::read(path).with_context(|| format!("Failed to read NOR file: {}", path))?;
 
         if data.len() < NOR_SIZE {
             anyhow::bail!(
@@ -242,7 +256,7 @@ impl Emulator {
         let target_cycles = CYCLES_PER_FRAME;
         let mut cycles_this_frame = 0u64;
 
-        while cycles_this_frame < target_cycles as u64 {
+        while cycles_this_frame < target_cycles {
             let cycles = self.step();
             cycles_this_frame += cycles;
         }
@@ -558,10 +572,8 @@ impl<'a> CpuBus for EmulatorBus<'a> {
         if addr < 0x8000 {
             let (region, offset) = self.memory.map_address(addr);
             match region {
-                MemRegion::Ram => {
-                    if offset < RAM_SIZE {
-                        self.memory.ram[offset] = value;
-                    }
+                MemRegion::Ram if offset < RAM_SIZE => {
+                    self.memory.ram[offset] = value;
                 }
                 MemRegion::Nor => {
                     // NOR Flash writes go through the flash controller

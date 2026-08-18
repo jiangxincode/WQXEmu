@@ -143,7 +143,11 @@ impl Timer {
         }
 
         // Check Timer1 (1/256s period)
-        let timer1_period = if self.speed_up { CYCLES_TIMER1_SPEED_UP } else { CYCLES_TIMER1 };
+        let timer1_period = if self.speed_up {
+            CYCLES_TIMER1_SPEED_UP
+        } else {
+            CYCLES_TIMER1
+        };
         if self.cycles >= self.timer1_cycles {
             self.timer1_cycles = self.timer1_cycles.wrapping_add(timer1_period);
             self.clock_data[4] = self.clock_data[4].wrapping_add(1);
@@ -165,7 +169,8 @@ impl Timer {
             if self.clock_data[1] >= 60 {
                 self.clock_data[1] = 0;
                 // Increment hours
-                self.clock_data[2] = (self.clock_data[2] & 0xC0) | ((self.clock_data[2] & 0x1F) + 1);
+                self.clock_data[2] =
+                    (self.clock_data[2] & 0xC0) | ((self.clock_data[2] & 0x1F) + 1);
                 if (self.clock_data[2] & 0x1F) >= 24 {
                     self.clock_data[2] &= 0xC0;
                     // Increment day

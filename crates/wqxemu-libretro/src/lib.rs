@@ -6,6 +6,12 @@
 
 #![allow(clippy::upper_case_acronyms)]
 #![allow(static_mut_refs)]
+#![allow(dead_code)]
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+#![allow(private_interfaces)]
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(clippy::manual_range_contains)]
 
 use std::ffi::{c_void, CStr};
 use std::os::raw::c_char;
@@ -248,37 +254,49 @@ pub extern "C" fn retro_set_environment(cb: RetroEnvironmentT) {
 /// Set video refresh callback
 #[no_mangle]
 pub extern "C" fn retro_set_video_refresh(cb: RetroVideoRefreshT) {
-    unsafe { VIDEO_CB = cb; }
+    unsafe {
+        VIDEO_CB = cb;
+    }
 }
 
 /// Set audio sample callback
 #[no_mangle]
 pub extern "C" fn retro_set_audio_sample(cb: RetroAudioSampleT) {
-    unsafe { AUDIO_CB = cb; }
+    unsafe {
+        AUDIO_CB = cb;
+    }
 }
 
 /// Set audio sample batch callback
 #[no_mangle]
 pub extern "C" fn retro_set_audio_sample_batch(cb: RetroAudioSampleBatchT) {
-    unsafe { AUDIO_BATCH_CB = cb; }
+    unsafe {
+        AUDIO_BATCH_CB = cb;
+    }
 }
 
 /// Set input poll callback
 #[no_mangle]
 pub extern "C" fn retro_set_input_poll(cb: RetroInputPollT) {
-    unsafe { INPUT_POLL_CB = cb; }
+    unsafe {
+        INPUT_POLL_CB = cb;
+    }
 }
 
 /// Set input state callback
 #[no_mangle]
 pub extern "C" fn retro_set_input_state(cb: RetroInputStateT) {
-    unsafe { INPUT_STATE_CB = cb; }
+    unsafe {
+        INPUT_STATE_CB = cb;
+    }
 }
 
 /// Set keyboard callback
 #[no_mangle]
 pub extern "C" fn retro_set_keyboard_callback(cb: RetroKeyboardCallbackT) {
-    unsafe { KEYBOARD_CB = cb; }
+    unsafe {
+        KEYBOARD_CB = cb;
+    }
 }
 
 /// Return API version

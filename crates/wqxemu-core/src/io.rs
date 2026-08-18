@@ -24,24 +24,18 @@
 //   0x3E: Clock index
 //   0x3F: Clock data read/write
 
+use crate::audio::Audio;
 use crate::input::Input;
 use crate::lcd::Lcd;
-use crate::timer::Timer;
-use crate::audio::Audio;
 use crate::memory::Memory;
+use crate::timer::Timer;
 
 /// IO register handler
 pub struct IoHandler;
 
 impl IoHandler {
     /// Read from an IO register
-    pub fn read(
-        addr: u8,
-        io: &[u8],
-        input: &Input,
-        timer: &Timer,
-        audio: &Audio,
-    ) -> u8 {
+    pub fn read(addr: u8, io: &[u8], input: &Input, timer: &Timer, _audio: &Audio) -> u8 {
         match addr {
             // Register 0x06: LCD address low
             0x06 => io[0x06],
@@ -88,6 +82,7 @@ impl IoHandler {
 
     /// Write to an IO register
     /// Returns the side effects that occurred
+    #[allow(clippy::too_many_arguments)]
     pub fn write(
         addr: u8,
         value: u8,
@@ -144,16 +139,13 @@ impl IoHandler {
                 // Read keypad matrix for the selected row
                 io[0x08] = input.read_keypad(value);
                 // Update keypad status
-                match value {
-                    0x00 => {
-                        // Check row 7 for power key
-                        if input.matrix[7] & 0xFE == 0 {
-                            io[0x0B] |= 0x01; // No key pressed
-                        } else {
-                            io[0x0B] &= 0xFE; // Key pressed
-                        }
+                if value == 0x00 {
+                    // Check row 7 for power key
+                    if input.matrix[7] & 0xFE == 0 {
+                        io[0x0B] |= 0x01; // No key pressed
+                    } else {
+                        io[0x0B] &= 0xFE; // Key pressed
                     }
-                    _ => {}
                 }
             }
 
