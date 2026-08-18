@@ -1,21 +1,25 @@
-// WQXEmu Core - Platform-independent Wenquxing NC1020 hardware emulation.
+// WQXEmu Core - Platform-independent Wenquxing hardware emulation.
 //
-// This crate provides a complete NC1020 hardware emulation core that can be
-// used by any frontend (standalone, libretro, WASM, etc.).
+// This crate provides hardware emulation cores for multiple Wenquxing
+// models (NC1020, PC1000, NC2000) that can be used by any frontend
+// (standalone, libretro, WASM, etc.).
 //
 // # Architecture
 //
-// The emulator is organized into these main components:
+// Shared components:
 // - `cpu`: 6502 CPU emulation with full instruction set
-// - `memory`: Memory mapping with bank switching
-// - `io`: IO register handling (0x00-0x3F)
 // - `lcd`: LCD controller (160x80, 1-bit)
 // - `input`: Keyboard matrix (8x8)
 // - `timer`: Timer system (Timer0: 2Hz, Timer1: 256Hz)
 // - `audio`: JG WAV audio
 // - `flash`: NOR Flash controller
-// - `emulator`: Main orchestrator combining all components
 // - `save`: Save state serialization
+//
+// Model-specific components:
+// - `machine`: `Machine` trait, `MachineModel` and `RomFiles`
+// - `machines`: per-model implementations (NC1020 complete, PC1000/NC2000
+//   scaffolding)
+// - `emulator`: model-agnostic shell owning the shared CPU and frame loop
 
 pub mod audio;
 pub mod cpu;
@@ -24,6 +28,8 @@ pub mod flash;
 pub mod input;
 pub mod io;
 pub mod lcd;
+pub mod machine;
+pub mod machines;
 pub mod memory;
 pub mod save;
 pub mod timer;
@@ -32,3 +38,5 @@ pub mod timer;
 pub use emulator::Emulator;
 pub use input::key_ids;
 pub use lcd::{LCD_HEIGHT, LCD_WIDTH};
+pub use machine::{Machine, MachineModel, RomFiles};
+pub use machines::detect_model;

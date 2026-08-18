@@ -1,33 +1,52 @@
-// WQXEmu - Standalone desktop frontend for NC1020 emulator.
+// WQXEmu - Standalone desktop frontend for Wenquxing emulators.
 //
-// This is a simple desktop application that runs the NC1020 emulator
-// in a window with keyboard input support.
+// This is a simple desktop application that runs the emulator in a
+// window with keyboard input support. The target model is selected with
+// `--model` or auto-detected from the ROM files.
 
 use anyhow::Result;
 use clap::Parser;
 use minifb::{Key, Window, WindowOptions};
 
-use wqxemu_core::{key_ids, Emulator, LCD_HEIGHT, LCD_WIDTH};
+use std::path::PathBuf;
 
-/// WQXEmu - Wenquxing NC1020 Emulator
+use wqxemu_core::{detect_model, key_ids, Emulator, MachineModel, RomFiles, LCD_HEIGHT, LCD_WIDTH};
+
+/// WQXEmu - Wenquxing Emulator
 #[derive(Parser)]
 #[command(name = "wqxemu", version, about)]
 struct Args {
-    /// Path to ROM file (obj_lu.bin)
-    #[arg(help = "Path to the NC1020 ROM file")]
-    rom_path: String,
+    /// Path to the system ROM dump (obj_lu.bin / *.rom)
+    #[arg(help = "Path to the ROM file (not needed for NC2000)")]
+    rom_path: Option<String>,
 
-    /// Path to NOR Flash file (nc1020.fls)
+    /// Path to the NOR Flash file (nc1020.fls / *.nor)
     #[arg(short = 'n', long, help = "Path to the NOR Flash file")]
     nor_path: Option<String>,
+
+    /// Path to the NAND Flash file (NC2000)
+    #[arg(long, help = "Path to the NAND Flash file")]
+    nand_path: Option<String>,
+
+    /// Path to the first NAND plane (NC2000, optional)
+    #[arg(long, help = "Path to the first NAND plane file")]
+    nand0_path: Option<String>,
+
+    /// Hardware model: nc1020, pc1000 or nc2000 (default: auto-detect)
+    #[arg(long, help = "Hardware model (nc1020, pc1000, nc2000)")]
+    model: Option<String>,
 
     /// Scale factor for the display
     #[arg(short = 's', long, default_value = "4", help = "Display scale factor")]
     scale: u32,
 
-    /// Take screenshot after N frames and exit
-    #[arg(long, help = "Take screenshot after N frames and exit")]
-    screenshot_frames: Option<u64>,
+    /// Take a screenshot after N frames and exit (saves as PNG)
+    #[arg(short = 'S', long = "screenshot", value_name = "PATH")]
+    screenshot: Option<String>,
+
+    /// Number of frames to run before taking the screenshot (default: 30)
+    #[arg(long = "screenshot-frames", default_value = "30")]
+    screenshot_frames: u32,
 }
 
 /// Map minifb key to NC1020 key ID
@@ -115,21 +134,39 @@ fn main() -> Result<()> {
 
     let args = Args::parse();
 
+    // Assemble ROM files and pick the model
+    let files = RomFiles::new(
+        args.rom_path.as_ref().map(PathBuf::from),
+        args.nor_path.as_ref().map(PathBuf::from),
+        args.nand_path.as_ref().map(PathBuf::from),
+        args.nand0_path.as_ref().map(PathBuf::from),
+    );
+    let model = match &args.model {
+        Some(name) => MachineModel::from_name(name)
+            .ok_or_else(|| anyhow::anyhow!("unknown model: {}", name))?,
+        None => detect_model(&files),
+    };
+    log::info!("Selected model: {}", model.name());
+
     // Create emulator
-    log::info!("Loading ROM: {}", args.rom_path);
-    let mut emu = Emulator::from_rom(&args.rom_path, args.nor_path.as_deref())?;
+    let mut emu = Emulator::new(model, &files)?;
     emu.reset();
 
     log::info!("Emulator initialized, PC=0x{:04X}", emu.pc());
 
-    // If screenshot mode, run N frames and save screenshot
-    if let Some(frames) = args.screenshot_frames {
-        for _ in 0..frames {
+    // If screenshot mode, run N frames and save screenshot to the
+    // user-provided path, then exit.
+    if let Some(ref screenshot_path) = args.screenshot {
+        log::info!(
+            "Running {} frames before taking screenshot...",
+            args.screenshot_frames
+        );
+        for _ in 0..args.screenshot_frames {
             emu.run_frame();
         }
         let pixels = emu.framebuffer();
-        save_screenshot(&pixels, "screenshot.png")?;
-        log::info!("Screenshot saved to screenshot.png");
+        save_screenshot(&pixels, screenshot_path)?;
+        log::info!("Screenshot saved to {}", screenshot_path);
         return Ok(());
     }
 

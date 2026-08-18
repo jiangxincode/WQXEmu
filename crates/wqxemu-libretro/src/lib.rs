@@ -1,4 +1,4 @@
-// WQXEmu libretro core - RetroArch integration for NC1020 emulator.
+// WQXEmu libretro core - RetroArch integration for Wenquxing emulators.
 //
 // This crate implements the libretro C API, allowing WQXEmu to be loaded
 // as a core in RetroArch. It wraps the platform-independent wqxemu-core
@@ -16,6 +16,7 @@
 use std::ffi::{c_void, CStr};
 use std::os::raw::c_char;
 use std::panic;
+use std::path::Path;
 use std::ptr;
 
 use wqxemu_core::input::key_ids;
@@ -408,27 +409,67 @@ pub extern "C" fn retro_load_game(info: *const RetroGameInfo) -> bool {
             }
         };
 
-        // Create emulator with ROM
-        let mut emu = match Emulator::from_rom(path, None) {
+        // Assemble ROM / Flash files. The loaded file is classified by
+        // extension; sibling files with the same stem are picked up too
+        // (e.g. loading `nc2000.nand` finds `nc2000.nor`/`nc2000.nand0`).
+        let game_path = Path::new(path);
+        let stem = game_path
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned());
+        let ext = game_path
+            .extension()
+            .map(|e| e.to_string_lossy().to_ascii_lowercase());
+        let parent = game_path
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_default();
+
+        let mut files = wqxemu_core::RomFiles::new(None, None, None, None);
+        match ext.as_deref() {
+            Some("nand") => files.nand = Some(game_path.to_path_buf()),
+            Some("nand0") => files.nand0 = Some(game_path.to_path_buf()),
+            Some("fls") | Some("nor") => files.nor = Some(game_path.to_path_buf()),
+            _ => files.rom = Some(game_path.to_path_buf()),
+        }
+
+        if files.nor.is_none() {
+            if let Some(stem) = &stem {
+                for ext in ["fls", "nor"] {
+                    let candidate = parent.join(format!("{}.{}", stem, ext));
+                    if candidate.exists() {
+                        files.nor = Some(candidate);
+                        break;
+                    }
+                }
+            }
+        }
+        if files.nand.is_none() {
+            if let Some(stem) = &stem {
+                let candidate = parent.join(format!("{}.nand", stem));
+                if candidate.exists() {
+                    files.nand = Some(candidate);
+                }
+            }
+        }
+        if files.nand0.is_none() {
+            if let Some(stem) = &stem {
+                let candidate = parent.join(format!("{}.nand0", stem));
+                if candidate.exists() {
+                    files.nand0 = Some(candidate);
+                }
+            }
+        }
+
+        let model = wqxemu_core::detect_model(&files);
+        log::info!("Detected model: {}", model.name());
+
+        let mut emu = match Emulator::new(model, &files) {
             Ok(e) => e,
             Err(e) => {
                 log::error!("Failed to create emulator: {}", e);
                 return false;
             }
         };
-
-        // Try to find NOR file in same directory
-        let nor_path = std::path::Path::new(path)
-            .parent()
-            .map(|p| p.join("nc1020.fls"))
-            .filter(|p| p.exists())
-            .map(|p| p.to_string_lossy().into_owned());
-
-        if let Some(ref nor) = nor_path {
-            if let Err(e) = emu.load_nor(nor) {
-                log::warn!("Failed to load NOR file: {}", e);
-            }
-        }
 
         emu.reset();
         EMULATOR = Some(emu);
