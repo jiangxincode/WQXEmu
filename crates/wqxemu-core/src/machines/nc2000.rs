@@ -1465,6 +1465,20 @@ mod tests {
         Nc2000Machine::new(&RomFiles::new(None, None, None, None)).unwrap()
     }
 
+    /// Build RomFiles from the repository-root roms/ directory, or None if
+    /// the dumps are not present (tests then skip).
+    fn nc2000_rom_files() -> Option<RomFiles> {
+        let base = std::path::Path::new(r"E:\Code\WQXEmu\roms\nc2000");
+        let nor = base.join("nc2000.nor");
+        let nand = base.join("nc2000.nand");
+        let nand0 = base.join("nc2000.nand0");
+        if nor.exists() && nand.exists() && nand0.exists() {
+            Some(RomFiles::new(None, Some(nor), Some(nand), Some(nand0)))
+        } else {
+            None
+        }
+    }
+
     #[test]
     fn nor_software_id() {
         let mut m = empty_machine();
@@ -1538,7 +1552,7 @@ mod tests {
     fn nand_read_page() {
         let mut m = empty_machine();
         // Fill page 5 with known data
-        m.nand[5 * NAND_PAGE_SIZE + 0] = 0x11;
+        m.nand[5 * NAND_PAGE_SIZE] = 0x11;
         m.nand[5 * NAND_PAGE_SIZE + 511] = 0x22;
         m.nand[5 * NAND_PAGE_SIZE + 512] = 0x33;
 
@@ -1638,13 +1652,13 @@ mod tests {
         m.ext_reg[ext_reg::P0_PU] = 0x0F;
 
         // Press key at matrix (row 2, col 0)
-        m.set_key(2 << 3 | 0, true);
+        m.set_key(2 << 3, true);
         m.update_keypad_registers();
         // Port0 input should reflect the pressed key: P00 bit set
         assert_ne!(m.r08_port0_id & 0x01, 0);
 
         // Release
-        m.set_key(2 << 3 | 0, false);
+        m.set_key(2 << 3, false);
         m.update_keypad_registers();
         assert_eq!(m.r08_port0_id & 0x01, 0);
     }
@@ -1652,18 +1666,10 @@ mod tests {
     #[test]
     fn step_advances_cycles() {
         // Boot with the real NC2000 dump files and verify the CPU advances.
-        let files = RomFiles::new(
-            None,
-            Some(std::path::PathBuf::from(
-                r"E:\Code\WQXEmu\tmp\roms\nc2000\nc2000.nor",
-            )),
-            Some(std::path::PathBuf::from(
-                r"E:\Code\WQXEmu\tmp\roms\nc2000\nc2000.nand",
-            )),
-            Some(std::path::PathBuf::from(
-                r"E:\Code\WQXEmu\tmp\roms\nc2000\nc2000.nand0",
-            )),
-        );
+        let Some(files) = nc2000_rom_files() else {
+            eprintln!("skipping: NC2000 dumps not present");
+            return;
+        };
         let mut machine = Nc2000Machine::new(&files).unwrap();
         machine.reset();
         let mut cpu = Cpu::new();
@@ -1690,18 +1696,10 @@ mod tests {
 
     #[test]
     fn run_frame_completes() {
-        let files = RomFiles::new(
-            None,
-            Some(std::path::PathBuf::from(
-                r"E:\Code\WQXEmu\tmp\roms\nc2000\nc2000.nor",
-            )),
-            Some(std::path::PathBuf::from(
-                r"E:\Code\WQXEmu\tmp\roms\nc2000\nc2000.nand",
-            )),
-            Some(std::path::PathBuf::from(
-                r"E:\Code\WQXEmu\tmp\roms\nc2000\nc2000.nand0",
-            )),
-        );
+        let Some(files) = nc2000_rom_files() else {
+            eprintln!("skipping: NC2000 dumps not present");
+            return;
+        };
         let mut machine = Nc2000Machine::new(&files).unwrap();
         machine.reset();
         let mut cpu = Cpu::new();
@@ -1724,18 +1722,10 @@ mod tests {
 
     #[test]
     fn standby_and_wake() {
-        let files = RomFiles::new(
-            None,
-            Some(std::path::PathBuf::from(
-                r"E:\Code\WQXEmu\tmp\roms\nc2000\nc2000.nor",
-            )),
-            Some(std::path::PathBuf::from(
-                r"E:\Code\WQXEmu\tmp\roms\nc2000\nc2000.nand",
-            )),
-            Some(std::path::PathBuf::from(
-                r"E:\Code\WQXEmu\tmp\roms\nc2000\nc2000.nand0",
-            )),
-        );
+        let Some(files) = nc2000_rom_files() else {
+            eprintln!("skipping: NC2000 dumps not present");
+            return;
+        };
         let mut machine = Nc2000Machine::new(&files).unwrap();
         machine.reset();
         let mut cpu = Cpu::new();
@@ -1761,7 +1751,7 @@ mod tests {
         let pc_before = cpu.pc;
         let _ = machine.step(&mut cpu);
         assert!(!machine.is_clk_off(), "clock should be restored");
-        assert_eq!(machine.do_warm_reset, false);
+        assert!(!machine.do_warm_reset);
         // After warm reset the CPU restarts at the reset vector; the same
         // step may already have executed the first instruction.
         assert_ne!(pc_before, cpu.pc);
@@ -1778,18 +1768,10 @@ mod tests {
 
     #[test]
     fn wake_shows_menu() {
-        let files = RomFiles::new(
-            None,
-            Some(std::path::PathBuf::from(
-                r"E:\Code\WQXEmu\tmp\roms\nc2000\nc2000.nor",
-            )),
-            Some(std::path::PathBuf::from(
-                r"E:\Code\WQXEmu\tmp\roms\nc2000\nc2000.nand",
-            )),
-            Some(std::path::PathBuf::from(
-                r"E:\Code\WQXEmu\tmp\roms\nc2000\nc2000.nand0",
-            )),
-        );
+        let Some(files) = nc2000_rom_files() else {
+            eprintln!("skipping: NC2000 dumps not present");
+            return;
+        };
         let mut machine = Nc2000Machine::new(&files).unwrap();
         machine.reset();
         let mut cpu = Cpu::new();
@@ -1864,18 +1846,10 @@ mod tests {
 
     #[test]
     fn cold_boot_lcd_trace() {
-        let files = RomFiles::new(
-            None,
-            Some(std::path::PathBuf::from(
-                r"E:\Code\WQXEmu\tmp\roms\nc2000\nc2000.nor",
-            )),
-            Some(std::path::PathBuf::from(
-                r"E:\Code\WQXEmu\tmp\roms\nc2000\nc2000.nand",
-            )),
-            Some(std::path::PathBuf::from(
-                r"E:\Code\WQXEmu\tmp\roms\nc2000\nc2000.nand0",
-            )),
-        );
+        let Some(files) = nc2000_rom_files() else {
+            eprintln!("skipping: NC2000 dumps not present");
+            return;
+        };
         let mut machine = Nc2000Machine::new(&files).unwrap();
         machine.reset();
         let mut cpu = Cpu::new();
