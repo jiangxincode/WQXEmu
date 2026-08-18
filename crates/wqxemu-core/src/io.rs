@@ -193,6 +193,11 @@ impl IoHandler {
             0x20 => {
                 io[0x20] = value;
                 audio.write_control(value);
+                // Hardware clears the register after a stop/reset command.
+                // The firmware polls this register to detect completion.
+                if value == 0x80 || value == 0x40 {
+                    io[0x20] = 0;
+                }
             }
 
             // Register 0x22: JG WAV data
@@ -221,6 +226,11 @@ impl IoHandler {
                 io[0x3F] = value;
                 let idx = io[0x3E];
                 timer.write_clock(idx, value);
+                // Writing clock control index 0x0B latches 0xF8 into
+                // the clock flags register (matching reference).
+                if idx == 0x0B {
+                    io[0x3D] = 0xF8;
+                }
             }
 
             // All other registers: simple write

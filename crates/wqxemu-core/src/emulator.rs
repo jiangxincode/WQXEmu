@@ -13,7 +13,7 @@ use crate::cpu::{Cpu, CpuBus, RESET_VECTOR};
 use crate::flash::Flash;
 use crate::input::Input;
 use crate::io::IoHandler;
-use crate::lcd::{Lcd, CYCLES_PER_FRAME, LCD_BUFFER_SIZE, LCD_HEIGHT, LCD_WIDTH};
+use crate::lcd::{Lcd, CYCLES_PER_FRAME, LCD_HEIGHT, LCD_WIDTH};
 use crate::memory::{Memory, MemRegion, BANK_SIZE, IO_LIMIT, NOR_SIZE, RAM_SIZE, ROM_SIZE};
 use crate::save::SaveState;
 use crate::timer::Timer;
@@ -93,16 +93,33 @@ impl Emulator {
             );
         }
 
-        // Process ROM: swap 16KB halves within each 32KB bank
-        // This is the "ProcessBinary" operation from the reference
-        let mut processed = vec![0u8; ROM_SIZE];
-        for offset in (0..ROM_SIZE).step_by(BANK_SIZE) {
+        // WQX binary dumps store each 32KB bank with its 16KB halves
+        // swapped. Swap them back so bank windows map linearly, matching
+        // how the NOR flash file is handled below.
+        let mut processed = vec![0u8; data.len()];
+        for offset in (0..data.len()).step_by(BANK_SIZE) {
+            if offset + BANK_SIZE > data.len() {
+                // Copy any trailing bytes beyond complete banks unchanged.
+                processed[offset..].copy_from_slice(&data[offset..]);
+                break;
+            }
             let src = &data[offset..offset + BANK_SIZE];
-            // Swap 16KB halves
             processed[offset + 0x4000..offset + 0x8000].copy_from_slice(&src[0..0x4000]);
             processed[offset..offset + 0x4000].copy_from_slice(&src[0x4000..0x8000]);
         }
         self.rom = processed;
+
+        // Debug: check ROM data at key offsets
+        log::debug!("ROM[0x0000]: {:02X} {:02X}", self.rom[0], self.rom[1]);
+        log::debug!("ROM[0x2000]: {:02X} {:02X}", self.rom[0x2000], self.rom[0x2001]);
+        log::debug!("ROM[0x3FFC]: {:02X} {:02X} (reset vector)", self.rom[0x3FFC], self.rom[0x3FFD]);
+        let rv = self.rom[0x3FFC] as u16 | (self.rom[0x3FFD] as u16) << 8;
+        log::debug!("Reset vector: 0x{:04X}", rv);
+        if (rv as usize) < self.rom.len() {
+            log::debug!("Code at reset vec: {:02X} {:02X} {:02X} {:02X}",
+                self.rom[rv as usize], self.rom[rv as usize + 1],
+                self.rom[rv as usize + 2], self.rom[rv as usize + 3]);
+        }
 
         // Initialize BBS pages from ROM
         self.memory.update_bbs_pages(&self.rom, &self.nor);
@@ -261,9 +278,19 @@ impl Emulator {
         let cycles = self.cpu.step(&mut bus);
 
         // Update timer
-        let irq = self.timer.tick(cycles);
-        if irq {
+        let fired = self.timer.tick(cycles);
+        if fired.any() {
             self.cpu.irq_pending = true;
+            if fired.timer1 {
+                // Timer1 (256 Hz) marks its interrupt flag in io[0x01],
+                // matching the reference implementation the firmware
+                // polls to identify the interrupt source.
+                self.memory.io[0x01] |= 0x08;
+            }
+            if fired.timer0 {
+                // Timer0 (2 Hz) updates the clock flags register.
+                self.memory.io[0x3D] = self.timer.io_3d;
+            }
         }
 
         // Handle wake-up pending
@@ -481,6 +508,11 @@ impl<'a> CpuBus for EmulatorBus<'a> {
                 0x20 => {
                     self.memory.io[0x20] = value;
                     self.audio.write_control(value);
+                    // Hardware clears the register after a stop/reset
+                    // command; the firmware polls it for completion.
+                    if value == 0x80 || value == 0x40 {
+                        self.memory.io[0x20] = 0;
+                    }
                 }
                 0x22 => {
                     self.memory.io[0x22] = value;
@@ -500,6 +532,11 @@ impl<'a> CpuBus for EmulatorBus<'a> {
                     self.memory.io[0x3F] = value;
                     let idx = self.memory.io[0x3E];
                     self.timer.write_clock(idx, value);
+                    // Writing clock control index 0x0B latches 0xF8 into
+                    // the clock flags register (matching reference).
+                    if idx == 0x0B {
+                        self.memory.io[0x3D] = 0xF8;
+                    }
                 }
                 _ => {
                     self.memory.io[addr as usize] = value;

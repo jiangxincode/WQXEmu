@@ -280,65 +280,68 @@ impl Memory {
                 }
             }
             2 => {
-                // 0x4000-0x5FFF: Bank window page 0
-                if self.current_bank < 0x20 {
-                    // NOR bank
-                    let bank_offset = self.current_bank as usize * BANK_SIZE;
-                    (MemRegion::Nor, bank_offset + offset)
-                } else if self.current_bank >= 0x80 {
-                    // ROM bank
-                    let volume_offset = match self.current_volume & 0x03 {
-                        0x01 => 0x100,
-                        0x03 => 0x200,
-                        _ => 0x000,
-                    };
-                    let bank_idx = volume_offset + (self.current_bank - 0x80) as usize;
-                    let bank_offset = bank_idx * BANK_SIZE;
-                    (MemRegion::Rom, bank_offset + offset)
-                } else {
-                    // Invalid bank, return zeros
-                    (MemRegion::Invalid, 0)
-                }
+                // 0x4000-0x5FFF: Bank window page 0 (8KB)
+                self.map_bank_window(offset)
             }
             3 => {
-                // 0x6000-0x7FFF: Bank window page 1
-                if self.current_bank < 0x20 {
-                    let bank_offset = self.current_bank as usize * BANK_SIZE;
-                    (MemRegion::Nor, bank_offset + PAGE_SIZE + offset)
-                } else if self.current_bank >= 0x80 {
-                    let volume_offset = match self.current_volume & 0x03 {
-                        0x01 => 0x100,
-                        0x03 => 0x200,
-                        _ => 0x000,
-                    };
-                    let bank_idx = volume_offset + (self.current_bank - 0x80) as usize;
-                    let bank_offset = bank_idx * BANK_SIZE;
-                    (MemRegion::Rom, bank_offset + PAGE_SIZE + offset)
-                } else {
-                    (MemRegion::Invalid, 0)
-                }
+                // 0x6000-0x7FFF: Bank window page 1 (8KB)
+                self.map_bank_window(PAGE_SIZE + offset)
             }
             4 => {
-                // BBS page based on register 0x0A
+                // 0x8000-0x9FFF: Bank window page 2 (8KB)
+                self.map_bank_window(2 * PAGE_SIZE + offset)
+            }
+            5 => {
+                // 0xA000-0xBFFF: Bank window page 3 (8KB)
+                self.map_bank_window(3 * PAGE_SIZE + offset)
+            }
+            6 => {
+                // 0xC000-0xDFFF: BBS page or bank window page 4
+                // The reference uses BBS pages here based on ROA/BBS register
                 let bbs_idx = (self.current_roa_bbs & 0x0F) as usize;
                 if bbs_idx < 16 {
                     (MemRegion::Bbs, bbs_idx * PAGE_SIZE + offset)
                 } else {
-                    (MemRegion::Invalid, 0)
+                    self.map_bank_window(4 * PAGE_SIZE + offset)
                 }
             }
-            5 => {
-                // Fixed ROM page (volume[0] + 0x2000)
-                // This is the interrupt vector area at 0xE000-0xFFFF
-                let volume_offset = match self.current_volume & 0x03 {
-                    0x01 => 0x100,
-                    0x03 => 0x200,
-                    _ => 0x000,
-                };
-                let bank_offset = volume_offset * BANK_SIZE;
-                (MemRegion::Rom, bank_offset + 0x2000 + offset)
+            7 => {
+                // 0xE000-0xFFFF: Fixed ROM (volume0 bank 0x80)
+                // This region always maps to the upper 16KB of the first
+                // 32KB bank of the current volume (volume[0] + 0x2000 in
+                // reference implementations). With the 16KB-half-swapped
+                // ROM layout used by this emulator, that is bank 0 + 0x2000.
+                (MemRegion::Rom, 0x2000 + offset)
             }
             _ => (MemRegion::Invalid, 0),
+        }
+    }
+
+    /// Map a bank window address (0x4000-0xBFFF) to the correct ROM/NOR offset
+    /// bank_offset_in_page is the offset within the 32KB bank (0x0000-0x7FFF)
+    fn map_bank_window(&self, bank_offset_in_page: usize) -> (MemRegion, usize) {
+        if self.current_bank < 0x20 {
+            // NOR bank: bank_idx * 32KB + offset
+            let bank_offset = self.current_bank as usize * BANK_SIZE;
+            (MemRegion::Nor, bank_offset + bank_offset_in_page)
+        } else if self.current_bank >= 0x80 {
+            // ROM bank: calculate volume and bank index
+            // The ROM is organized as 3 volumes of 256 banks * 32KB = 8MB
+            // each, indexed by the full CPU bank number (0x80-0xFF):
+            //   Volume 0: file banks 0x00-0xFF
+            //   Volume 1: file banks 0x100-0x1FF
+            //   Volume 2: file banks 0x200-0x2FF
+            let volume_base = match self.current_volume & 0x03 {
+                0x01 => 0x100 * BANK_SIZE, // Volume 1
+                0x03 => 0x200 * BANK_SIZE, // Volume 2
+                _ => 0x000,                // Volume 0 (default)
+            };
+            let rom_offset =
+                volume_base + self.current_bank as usize * BANK_SIZE + bank_offset_in_page;
+            (MemRegion::Rom, rom_offset)
+        } else {
+            // Invalid bank range (0x20-0x7F)
+            (MemRegion::Invalid, 0)
         }
     }
 }

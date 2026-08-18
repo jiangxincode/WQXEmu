@@ -41,6 +41,22 @@ pub const CYCLES_PER_MS: u32 = CPU_FREQ / 1000;
 /// RTC clock data size
 pub const CLOCK_DATA_SIZE: usize = 80;
 
+/// Which timer(s) fired during a tick.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TimerIrq {
+    /// Timer0 (2 Hz) fired.
+    pub timer0: bool,
+    /// Timer1 (256 Hz) fired.
+    pub timer1: bool,
+}
+
+impl TimerIrq {
+    /// True if any timer fired.
+    pub fn any(self) -> bool {
+        self.timer0 || self.timer1
+    }
+}
+
 /// Timer system state
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Timer {
@@ -56,6 +72,9 @@ pub struct Timer {
     pub timer0_toggle: bool,
     /// Whether IRQ should be generated
     pub should_irq: bool,
+    /// Value written to IO register 0x3D when Timer0 fires
+    /// (0 normally, 0x20 when a countdown alarm triggers)
+    pub io_3d: u8,
     /// Accumulated CPU cycles for timing
     pub cycles: u32,
     /// Whether speed-up mode is active
@@ -72,6 +91,7 @@ impl Timer {
             timer1_cycles: CYCLES_TIMER1,
             timer0_toggle: false,
             should_irq: false,
+            io_3d: 0,
             cycles: 0,
             speed_up: false,
         }
@@ -85,6 +105,7 @@ impl Timer {
         self.timer1_cycles = CYCLES_TIMER1;
         self.timer0_toggle = false;
         self.should_irq = false;
+        self.io_3d = 0;
         self.cycles = 0;
     }
 
@@ -94,10 +115,10 @@ impl Timer {
     }
 
     /// Advance timers by the given number of CPU cycles
-    /// Returns true if an IRQ should be generated
-    pub fn tick(&mut self, cpu_cycles: u64) -> bool {
+    /// Returns which timer(s) fired and should generate an IRQ
+    pub fn tick(&mut self, cpu_cycles: u64) -> TimerIrq {
         self.cycles += cpu_cycles as u32;
-        let mut irq = false;
+        let mut fired = TimerIrq::default();
 
         // Check Timer0 (0.5s period)
         if self.cycles >= self.timer0_cycles {
@@ -111,12 +132,14 @@ impl Timer {
             if !self.is_countdown() || self.timer0_toggle {
                 // Normal: clear clock flags
                 self.clock_flags = 0;
+                self.io_3d = 0;
             } else {
                 // Countdown alarm triggered
-                self.clock_flags = 0x20;
+                self.clock_flags &= 0xFD;
+                self.io_3d = 0x20;
             }
 
-            irq = true;
+            fired.timer0 = true;
         }
 
         // Check Timer1 (1/256s period)
@@ -124,11 +147,11 @@ impl Timer {
         if self.cycles >= self.timer1_cycles {
             self.timer1_cycles = self.timer1_cycles.wrapping_add(timer1_period);
             self.clock_data[4] = self.clock_data[4].wrapping_add(1);
-            irq = true;
+            fired.timer1 = true;
         }
 
-        self.should_irq = irq;
-        irq
+        self.should_irq = fired.any();
+        fired
     }
 
     /// Adjust RTC time (called every 0.5s)
