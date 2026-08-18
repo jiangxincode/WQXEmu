@@ -75,6 +75,11 @@ impl Lcd {
             return false;
         }
         let addr = self.lcd_addr as usize;
+        self.copy_from(ram, addr)
+    }
+
+    /// Copy the framebuffer from a RAM region at the given address.
+    pub fn copy_from(&mut self, ram: &[u8], addr: usize) -> bool {
         if addr + LCD_BUFFER_SIZE <= ram.len() {
             self.framebuffer
                 .copy_from_slice(&ram[addr..addr + LCD_BUFFER_SIZE]);

@@ -1125,7 +1125,7 @@ impl Cpu {
 
     /// Immediate: returns value directly
     #[inline]
-    fn imm(&mut self, bus: &impl CpuBus) -> u8 {
+    fn imm(&mut self, bus: &mut impl CpuBus) -> u8 {
         let v = bus.read(self.pc);
         self.pc = self.pc.wrapping_add(1);
         v
@@ -1133,7 +1133,7 @@ impl Cpu {
 
     /// Zero Page
     #[inline]
-    fn zp(&mut self, bus: &impl CpuBus) -> (u16, bool) {
+    fn zp(&mut self, bus: &mut impl CpuBus) -> (u16, bool) {
         let addr = bus.read(self.pc) as u16;
         self.pc = self.pc.wrapping_add(1);
         (addr, false)
@@ -1141,7 +1141,7 @@ impl Cpu {
 
     /// Zero Page, X
     #[inline]
-    fn zpx(&mut self, bus: &impl CpuBus) -> (u16, bool) {
+    fn zpx(&mut self, bus: &mut impl CpuBus) -> (u16, bool) {
         let addr = bus.read(self.pc).wrapping_add(self.x) as u16;
         self.pc = self.pc.wrapping_add(1);
         (addr, false)
@@ -1149,7 +1149,7 @@ impl Cpu {
 
     /// Zero Page, Y
     #[inline]
-    fn zpy(&mut self, bus: &impl CpuBus) -> (u16, bool) {
+    fn zpy(&mut self, bus: &mut impl CpuBus) -> (u16, bool) {
         let addr = bus.read(self.pc).wrapping_add(self.y) as u16;
         self.pc = self.pc.wrapping_add(1);
         (addr, false)
@@ -1157,7 +1157,7 @@ impl Cpu {
 
     /// Absolute address helper
     #[inline]
-    fn abs_addr(&mut self, bus: &impl CpuBus) -> u16 {
+    fn abs_addr(&mut self, bus: &mut impl CpuBus) -> u16 {
         let lo = bus.read(self.pc) as u16;
         let hi = bus.read(self.pc.wrapping_add(1)) as u16;
         self.pc = self.pc.wrapping_add(2);
@@ -1166,13 +1166,13 @@ impl Cpu {
 
     /// Absolute
     #[inline]
-    fn abs(&mut self, bus: &impl CpuBus) -> (u16, bool) {
+    fn abs(&mut self, bus: &mut impl CpuBus) -> (u16, bool) {
         (self.abs_addr(bus), false)
     }
 
     /// Absolute, X
     #[inline]
-    fn abx(&mut self, bus: &impl CpuBus) -> (u16, bool) {
+    fn abx(&mut self, bus: &mut impl CpuBus) -> (u16, bool) {
         let base = self.abs_addr(bus);
         let addr = base.wrapping_add(self.x as u16);
         let page_crossed = (base & 0xFF00) != (addr & 0xFF00);
@@ -1181,7 +1181,7 @@ impl Cpu {
 
     /// Absolute, Y
     #[inline]
-    fn aby(&mut self, bus: &impl CpuBus) -> (u16, bool) {
+    fn aby(&mut self, bus: &mut impl CpuBus) -> (u16, bool) {
         let base = self.abs_addr(bus);
         let addr = base.wrapping_add(self.y as u16);
         let page_crossed = (base & 0xFF00) != (addr & 0xFF00);
@@ -1190,7 +1190,7 @@ impl Cpu {
 
     /// (Indirect, X) - zero page indirect indexed by X
     #[inline]
-    fn izx(&mut self, bus: &impl CpuBus) -> (u16, bool) {
+    fn izx(&mut self, bus: &mut impl CpuBus) -> (u16, bool) {
         let zp_addr = bus.read(self.pc).wrapping_add(self.x) as u16;
         self.pc = self.pc.wrapping_add(1);
         let lo = bus.read(zp_addr) as u16;
@@ -1200,7 +1200,7 @@ impl Cpu {
 
     /// (Indirect), Y - zero page indirect indexed by Y
     #[inline]
-    fn izy(&mut self, bus: &impl CpuBus) -> (u16, bool) {
+    fn izy(&mut self, bus: &mut impl CpuBus) -> (u16, bool) {
         let zp_addr = bus.read(self.pc) as u16;
         self.pc = self.pc.wrapping_add(1);
         let lo = bus.read(zp_addr) as u16;
@@ -1213,7 +1213,7 @@ impl Cpu {
 
     /// Read from bus (handles IO region)
     #[inline]
-    fn read_bus(&self, bus: &impl CpuBus, addr: u16) -> u8 {
+    fn read_bus(&self, bus: &mut impl CpuBus, addr: u16) -> u8 {
         bus.read(addr)
     }
 
@@ -1325,7 +1325,7 @@ impl Cpu {
     }
 
     /// BIT test
-    fn bit(&mut self, bus: &impl CpuBus, addr: u16) {
+    fn bit(&mut self, bus: &mut impl CpuBus, addr: u16) {
         let value = bus.read(addr);
         self.ps = (self.ps & !(FLAG_N | FLAG_V | FLAG_Z))
             | (value & 0xC0)  // N and V come from the operand
@@ -1414,8 +1414,9 @@ impl Cpu {
         self.set_nz(value);
     }
 
-    /// Branch helper: returns extra cycles (0, 1, or 2)
-    fn branch(&mut self, bus: &impl CpuBus, condition: bool) -> u64 {
+    /// Branch helper: returns total cycles for the branch.
+    /// 6502 timing: not taken = 2, taken = 3, taken across a page = 4.
+    fn branch(&mut self, bus: &mut impl CpuBus, condition: bool) -> u64 {
         let offset = bus.read(self.pc) as i8;
         self.pc = self.pc.wrapping_add(1);
         if condition {
@@ -1423,12 +1424,12 @@ impl Cpu {
             self.pc = self.pc.wrapping_add(offset as u16);
             // Extra cycle for page crossing
             if (old_pc & 0xFF00) != (self.pc & 0xFF00) {
-                2
+                4
             } else {
-                1
+                3
             }
         } else {
-            0
+            2
         }
     }
 }
@@ -1441,12 +1442,15 @@ impl Default for Cpu {
 
 /// Bus interface for CPU memory access
 pub trait CpuBus {
-    /// Read a byte from the given address
-    fn read(&self, addr: u16) -> u8;
+    /// Read a byte from the given address.
+    ///
+    /// `&mut self` because some hardware registers have read side effects
+    /// (e.g. NC2000 reads of IO 0x04-0x07 start/stop timers).
+    fn read(&mut self, addr: u16) -> u8;
     /// Write a byte to the given address
     fn write(&mut self, addr: u16, value: u8);
     /// Read a 16-bit word (little-endian)
-    fn read_u16(&self, addr: u16) -> u16 {
+    fn read_u16(&mut self, addr: u16) -> u16 {
         let lo = self.read(addr) as u16;
         let hi = self.read(addr.wrapping_add(1)) as u16;
         (hi << 8) | lo
@@ -1468,7 +1472,7 @@ mod tests {
     }
 
     impl CpuBus for TestBus {
-        fn read(&self, addr: u16) -> u8 {
+        fn read(&mut self, addr: u16) -> u8 {
             self.ram[addr as usize]
         }
         fn write(&mut self, addr: u16, value: u8) {

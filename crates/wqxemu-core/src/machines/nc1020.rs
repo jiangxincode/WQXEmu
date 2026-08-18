@@ -334,7 +334,7 @@ struct Nc1020Bus<'a> {
 }
 
 impl<'a> CpuBus for Nc1020Bus<'a> {
-    fn read(&self, addr: u16) -> u8 {
+    fn read(&mut self, addr: u16) -> u8 {
         if addr < IO_LIMIT {
             return IoHandler::read(
                 addr as u8,
@@ -482,10 +482,8 @@ impl<'a> CpuBus for Nc1020Bus<'a> {
         if addr < 0x8000 {
             let (region, offset) = self.memory.map_address(addr);
             match region {
-                MemRegion::Ram => {
-                    if offset < RAM_SIZE {
-                        self.memory.ram[offset] = value;
-                    }
+                MemRegion::Ram if offset < RAM_SIZE => {
+                    self.memory.ram[offset] = value;
                 }
                 MemRegion::Nor => {
                     // NOR Flash writes go through the flash controller
