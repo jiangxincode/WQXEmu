@@ -170,53 +170,176 @@ impl Cpu {
 
         match opcode {
             // === ADC: Add with Carry ===
-            0x69 => { let v = self.imm(bus); self.adc(v); self.cycles += 2; }
-            0x65 => { let (a, _) = self.zp(bus); let v = self.read_bus(bus, a); self.adc(v); self.cycles += 3; }
-            0x75 => { let (a, _) = self.zpx(bus); let v = self.read_bus(bus, a); self.adc(v); self.cycles += 4; }
-            0x6D => { let (a, _) = self.abs(bus); let v = self.read_bus(bus, a); self.adc(v); self.cycles += 4; }
-            0x7D => { let (a, p) = self.abx(bus); let v = self.read_bus(bus, a); self.adc(v); self.cycles += 4 + p as u64; }
-            0x79 => { let (a, p) = self.aby(bus); let v = self.read_bus(bus, a); self.adc(v); self.cycles += 4 + p as u64; }
-            0x61 => { let (a, _) = self.izx(bus); let v = self.read_bus(bus, a); self.adc(v); self.cycles += 6; }
-            0x71 => { let (a, p) = self.izy(bus); let v = self.read_bus(bus, a); self.adc(v); self.cycles += 5 + p as u64; }
+            0x69 => {
+                let v = self.imm(bus);
+                self.adc(v);
+                self.cycles += 2;
+            }
+            0x65 => {
+                let (a, _) = self.zp(bus);
+                let v = self.read_bus(bus, a);
+                self.adc(v);
+                self.cycles += 3;
+            }
+            0x75 => {
+                let (a, _) = self.zpx(bus);
+                let v = self.read_bus(bus, a);
+                self.adc(v);
+                self.cycles += 4;
+            }
+            0x6D => {
+                let (a, _) = self.abs(bus);
+                let v = self.read_bus(bus, a);
+                self.adc(v);
+                self.cycles += 4;
+            }
+            0x7D => {
+                let (a, p) = self.abx(bus);
+                let v = self.read_bus(bus, a);
+                self.adc(v);
+                self.cycles += 4 + p as u64;
+            }
+            0x79 => {
+                let (a, p) = self.aby(bus);
+                let v = self.read_bus(bus, a);
+                self.adc(v);
+                self.cycles += 4 + p as u64;
+            }
+            0x61 => {
+                let (a, _) = self.izx(bus);
+                let v = self.read_bus(bus, a);
+                self.adc(v);
+                self.cycles += 6;
+            }
+            0x71 => {
+                let (a, p) = self.izy(bus);
+                let v = self.read_bus(bus, a);
+                self.adc(v);
+                self.cycles += 5 + p as u64;
+            }
 
             // === AND: Logical AND ===
-            0x29 => { let v = self.imm(bus); self.and(v); self.cycles += 2; }
-            0x25 => { let (a, _) = self.zp(bus); let v = self.read_bus(bus, a); self.and(v); self.cycles += 3; }
-            0x35 => { let (a, _) = self.zpx(bus); let v = self.read_bus(bus, a); self.and(v); self.cycles += 4; }
-            0x2D => { let (a, _) = self.abs(bus); let v = self.read_bus(bus, a); self.and(v); self.cycles += 4; }
-            0x3D => { let (a, p) = self.abx(bus); let v = self.read_bus(bus, a); self.and(v); self.cycles += 4 + p as u64; }
-            0x39 => { let (a, p) = self.aby(bus); let v = self.read_bus(bus, a); self.and(v); self.cycles += 4 + p as u64; }
-            0x21 => { let (a, _) = self.izx(bus); let v = self.read_bus(bus, a); self.and(v); self.cycles += 6; }
-            0x31 => { let (a, p) = self.izy(bus); let v = self.read_bus(bus, a); self.and(v); self.cycles += 5 + p as u64; }
+            0x29 => {
+                let v = self.imm(bus);
+                self.and(v);
+                self.cycles += 2;
+            }
+            0x25 => {
+                let (a, _) = self.zp(bus);
+                let v = self.read_bus(bus, a);
+                self.and(v);
+                self.cycles += 3;
+            }
+            0x35 => {
+                let (a, _) = self.zpx(bus);
+                let v = self.read_bus(bus, a);
+                self.and(v);
+                self.cycles += 4;
+            }
+            0x2D => {
+                let (a, _) = self.abs(bus);
+                let v = self.read_bus(bus, a);
+                self.and(v);
+                self.cycles += 4;
+            }
+            0x3D => {
+                let (a, p) = self.abx(bus);
+                let v = self.read_bus(bus, a);
+                self.and(v);
+                self.cycles += 4 + p as u64;
+            }
+            0x39 => {
+                let (a, p) = self.aby(bus);
+                let v = self.read_bus(bus, a);
+                self.and(v);
+                self.cycles += 4 + p as u64;
+            }
+            0x21 => {
+                let (a, _) = self.izx(bus);
+                let v = self.read_bus(bus, a);
+                self.and(v);
+                self.cycles += 6;
+            }
+            0x31 => {
+                let (a, p) = self.izy(bus);
+                let v = self.read_bus(bus, a);
+                self.and(v);
+                self.cycles += 5 + p as u64;
+            }
 
             // === ASL: Arithmetic Shift Left ===
-            0x0A => { self.asl_acc(); self.cycles += 2; }
-            0x06 => { let (a, _) = self.zp(bus); self.asl_mem(bus, a); self.cycles += 5; }
-            0x16 => { let (a, _) = self.zpx(bus); self.asl_mem(bus, a); self.cycles += 6; }
-            0x0E => { let (a, _) = self.abs(bus); self.asl_mem(bus, a); self.cycles += 6; }
-            0x1E => { let (a, _) = self.abx(bus); self.asl_mem(bus, a); self.cycles += 7; }
+            0x0A => {
+                self.asl_acc();
+                self.cycles += 2;
+            }
+            0x06 => {
+                let (a, _) = self.zp(bus);
+                self.asl_mem(bus, a);
+                self.cycles += 5;
+            }
+            0x16 => {
+                let (a, _) = self.zpx(bus);
+                self.asl_mem(bus, a);
+                self.cycles += 6;
+            }
+            0x0E => {
+                let (a, _) = self.abs(bus);
+                self.asl_mem(bus, a);
+                self.cycles += 6;
+            }
+            0x1E => {
+                let (a, _) = self.abx(bus);
+                self.asl_mem(bus, a);
+                self.cycles += 7;
+            }
 
             // === BCC: Branch if Carry Clear ===
-            0x90 => { let c = self.branch(bus, !self.flag_c()); self.cycles += c; }
+            0x90 => {
+                let c = self.branch(bus, !self.flag_c());
+                self.cycles += c;
+            }
 
             // === BCS: Branch if Carry Set ===
-            0xB0 => { let c = self.branch(bus, self.flag_c()); self.cycles += c; }
+            0xB0 => {
+                let c = self.branch(bus, self.flag_c());
+                self.cycles += c;
+            }
 
             // === BEQ: Branch if Equal (Z set) ===
-            0xF0 => { let c = self.branch(bus, self.flag_z()); self.cycles += c; }
+            0xF0 => {
+                let c = self.branch(bus, self.flag_z());
+                self.cycles += c;
+            }
 
             // === BIT: Bit Test ===
-            0x24 => { let (a, _) = self.zp(bus); self.bit(bus, a); self.cycles += 3; }
-            0x2C => { let (a, _) = self.abs(bus); self.bit(bus, a); self.cycles += 4; }
+            0x24 => {
+                let (a, _) = self.zp(bus);
+                self.bit(bus, a);
+                self.cycles += 3;
+            }
+            0x2C => {
+                let (a, _) = self.abs(bus);
+                self.bit(bus, a);
+                self.cycles += 4;
+            }
 
             // === BMI: Branch if Minus (N set) ===
-            0x30 => { let c = self.branch(bus, self.flag_n()); self.cycles += c; }
+            0x30 => {
+                let c = self.branch(bus, self.flag_n());
+                self.cycles += c;
+            }
 
             // === BNE: Branch if Not Equal (Z clear) ===
-            0xD0 => { let c = self.branch(bus, !self.flag_z()); self.cycles += c; }
+            0xD0 => {
+                let c = self.branch(bus, !self.flag_z());
+                self.cycles += c;
+            }
 
             // === BPL: Branch if Plus (N clear) ===
-            0x10 => { let c = self.branch(bus, !self.flag_n()); self.cycles += c; }
+            0x10 => {
+                let c = self.branch(bus, !self.flag_n());
+                self.cycles += c;
+            }
 
             // === BRK: Force Interrupt ===
             0x00 => {
@@ -230,79 +353,255 @@ impl Cpu {
             }
 
             // === BVC: Branch if Overflow Clear ===
-            0x50 => { let c = self.branch(bus, !self.flag_v()); self.cycles += c; }
+            0x50 => {
+                let c = self.branch(bus, !self.flag_v());
+                self.cycles += c;
+            }
 
             // === BVS: Branch if Overflow Set ===
-            0x70 => { let c = self.branch(bus, self.flag_v()); self.cycles += c; }
+            0x70 => {
+                let c = self.branch(bus, self.flag_v());
+                self.cycles += c;
+            }
 
             // === CLC: Clear Carry ===
-            0x18 => { self.ps &= !FLAG_C; self.cycles += 2; }
+            0x18 => {
+                self.ps &= !FLAG_C;
+                self.cycles += 2;
+            }
 
             // === CLD: Clear Decimal ===
-            0xD8 => { self.ps &= !FLAG_D; self.cycles += 2; }
+            0xD8 => {
+                self.ps &= !FLAG_D;
+                self.cycles += 2;
+            }
 
             // === CLI: Clear Interrupt Disable ===
-            0x58 => { self.ps &= !FLAG_I; self.cycles += 2; }
+            0x58 => {
+                self.ps &= !FLAG_I;
+                self.cycles += 2;
+            }
 
             // === CLV: Clear Overflow ===
-            0xB8 => { self.ps &= !FLAG_V; self.cycles += 2; }
+            0xB8 => {
+                self.ps &= !FLAG_V;
+                self.cycles += 2;
+            }
 
             // === CMP: Compare ===
-            0xC9 => { let v = self.imm(bus); self.cmp(self.a, v); self.cycles += 2; }
-            0xC5 => { let (a, _) = self.zp(bus); let v = self.read_bus(bus, a); self.cmp(self.a, v); self.cycles += 3; }
-            0xD5 => { let (a, _) = self.zpx(bus); let v = self.read_bus(bus, a); self.cmp(self.a, v); self.cycles += 4; }
-            0xCD => { let (a, _) = self.abs(bus); let v = self.read_bus(bus, a); self.cmp(self.a, v); self.cycles += 4; }
-            0xDD => { let (a, p) = self.abx(bus); let v = self.read_bus(bus, a); self.cmp(self.a, v); self.cycles += 4 + p as u64; }
-            0xD9 => { let (a, p) = self.aby(bus); let v = self.read_bus(bus, a); self.cmp(self.a, v); self.cycles += 4 + p as u64; }
-            0xC1 => { let (a, _) = self.izx(bus); let v = self.read_bus(bus, a); self.cmp(self.a, v); self.cycles += 6; }
-            0xD1 => { let (a, p) = self.izy(bus); let v = self.read_bus(bus, a); self.cmp(self.a, v); self.cycles += 5 + p as u64; }
+            0xC9 => {
+                let v = self.imm(bus);
+                self.cmp(self.a, v);
+                self.cycles += 2;
+            }
+            0xC5 => {
+                let (a, _) = self.zp(bus);
+                let v = self.read_bus(bus, a);
+                self.cmp(self.a, v);
+                self.cycles += 3;
+            }
+            0xD5 => {
+                let (a, _) = self.zpx(bus);
+                let v = self.read_bus(bus, a);
+                self.cmp(self.a, v);
+                self.cycles += 4;
+            }
+            0xCD => {
+                let (a, _) = self.abs(bus);
+                let v = self.read_bus(bus, a);
+                self.cmp(self.a, v);
+                self.cycles += 4;
+            }
+            0xDD => {
+                let (a, p) = self.abx(bus);
+                let v = self.read_bus(bus, a);
+                self.cmp(self.a, v);
+                self.cycles += 4 + p as u64;
+            }
+            0xD9 => {
+                let (a, p) = self.aby(bus);
+                let v = self.read_bus(bus, a);
+                self.cmp(self.a, v);
+                self.cycles += 4 + p as u64;
+            }
+            0xC1 => {
+                let (a, _) = self.izx(bus);
+                let v = self.read_bus(bus, a);
+                self.cmp(self.a, v);
+                self.cycles += 6;
+            }
+            0xD1 => {
+                let (a, p) = self.izy(bus);
+                let v = self.read_bus(bus, a);
+                self.cmp(self.a, v);
+                self.cycles += 5 + p as u64;
+            }
 
             // === CPX: Compare X ===
-            0xE0 => { let v = self.imm(bus); self.cmp(self.x, v); self.cycles += 2; }
-            0xE4 => { let (a, _) = self.zp(bus); let v = self.read_bus(bus, a); self.cmp(self.x, v); self.cycles += 3; }
-            0xEC => { let (a, _) = self.abs(bus); let v = self.read_bus(bus, a); self.cmp(self.x, v); self.cycles += 4; }
+            0xE0 => {
+                let v = self.imm(bus);
+                self.cmp(self.x, v);
+                self.cycles += 2;
+            }
+            0xE4 => {
+                let (a, _) = self.zp(bus);
+                let v = self.read_bus(bus, a);
+                self.cmp(self.x, v);
+                self.cycles += 3;
+            }
+            0xEC => {
+                let (a, _) = self.abs(bus);
+                let v = self.read_bus(bus, a);
+                self.cmp(self.x, v);
+                self.cycles += 4;
+            }
 
             // === CPY: Compare Y ===
-            0xC0 => { let v = self.imm(bus); self.cmp(self.y, v); self.cycles += 2; }
-            0xC4 => { let (a, _) = self.zp(bus); let v = self.read_bus(bus, a); self.cmp(self.y, v); self.cycles += 3; }
-            0xCC => { let (a, _) = self.abs(bus); let v = self.read_bus(bus, a); self.cmp(self.y, v); self.cycles += 4; }
+            0xC0 => {
+                let v = self.imm(bus);
+                self.cmp(self.y, v);
+                self.cycles += 2;
+            }
+            0xC4 => {
+                let (a, _) = self.zp(bus);
+                let v = self.read_bus(bus, a);
+                self.cmp(self.y, v);
+                self.cycles += 3;
+            }
+            0xCC => {
+                let (a, _) = self.abs(bus);
+                let v = self.read_bus(bus, a);
+                self.cmp(self.y, v);
+                self.cycles += 4;
+            }
 
             // === DEC: Decrement Memory ===
-            0xC6 => { let (a, _) = self.zp(bus); self.dec(bus, a); self.cycles += 5; }
-            0xD6 => { let (a, _) = self.zpx(bus); self.dec(bus, a); self.cycles += 6; }
-            0xCE => { let (a, _) = self.abs(bus); self.dec(bus, a); self.cycles += 6; }
-            0xDE => { let (a, _) = self.abx(bus); self.dec(bus, a); self.cycles += 7; }
+            0xC6 => {
+                let (a, _) = self.zp(bus);
+                self.dec(bus, a);
+                self.cycles += 5;
+            }
+            0xD6 => {
+                let (a, _) = self.zpx(bus);
+                self.dec(bus, a);
+                self.cycles += 6;
+            }
+            0xCE => {
+                let (a, _) = self.abs(bus);
+                self.dec(bus, a);
+                self.cycles += 6;
+            }
+            0xDE => {
+                let (a, _) = self.abx(bus);
+                self.dec(bus, a);
+                self.cycles += 7;
+            }
 
             // === DEX: Decrement X ===
-            0xCA => { self.x = self.x.wrapping_sub(1); self.set_nz(self.x); self.cycles += 2; }
+            0xCA => {
+                self.x = self.x.wrapping_sub(1);
+                self.set_nz(self.x);
+                self.cycles += 2;
+            }
 
             // === DEY: Decrement Y ===
-            0x88 => { self.y = self.y.wrapping_sub(1); self.set_nz(self.y); self.cycles += 2; }
+            0x88 => {
+                self.y = self.y.wrapping_sub(1);
+                self.set_nz(self.y);
+                self.cycles += 2;
+            }
 
             // === EOR: Exclusive OR ===
-            0x49 => { let v = self.imm(bus); self.eor(v); self.cycles += 2; }
-            0x45 => { let (a, _) = self.zp(bus); let v = self.read_bus(bus, a); self.eor(v); self.cycles += 3; }
-            0x55 => { let (a, _) = self.zpx(bus); let v = self.read_bus(bus, a); self.eor(v); self.cycles += 4; }
-            0x4D => { let (a, _) = self.abs(bus); let v = self.read_bus(bus, a); self.eor(v); self.cycles += 4; }
-            0x5D => { let (a, p) = self.abx(bus); let v = self.read_bus(bus, a); self.eor(v); self.cycles += 4 + p as u64; }
-            0x59 => { let (a, p) = self.aby(bus); let v = self.read_bus(bus, a); self.eor(v); self.cycles += 4 + p as u64; }
-            0x41 => { let (a, _) = self.izx(bus); let v = self.read_bus(bus, a); self.eor(v); self.cycles += 6; }
-            0x51 => { let (a, p) = self.izy(bus); let v = self.read_bus(bus, a); self.eor(v); self.cycles += 5 + p as u64; }
+            0x49 => {
+                let v = self.imm(bus);
+                self.eor(v);
+                self.cycles += 2;
+            }
+            0x45 => {
+                let (a, _) = self.zp(bus);
+                let v = self.read_bus(bus, a);
+                self.eor(v);
+                self.cycles += 3;
+            }
+            0x55 => {
+                let (a, _) = self.zpx(bus);
+                let v = self.read_bus(bus, a);
+                self.eor(v);
+                self.cycles += 4;
+            }
+            0x4D => {
+                let (a, _) = self.abs(bus);
+                let v = self.read_bus(bus, a);
+                self.eor(v);
+                self.cycles += 4;
+            }
+            0x5D => {
+                let (a, p) = self.abx(bus);
+                let v = self.read_bus(bus, a);
+                self.eor(v);
+                self.cycles += 4 + p as u64;
+            }
+            0x59 => {
+                let (a, p) = self.aby(bus);
+                let v = self.read_bus(bus, a);
+                self.eor(v);
+                self.cycles += 4 + p as u64;
+            }
+            0x41 => {
+                let (a, _) = self.izx(bus);
+                let v = self.read_bus(bus, a);
+                self.eor(v);
+                self.cycles += 6;
+            }
+            0x51 => {
+                let (a, p) = self.izy(bus);
+                let v = self.read_bus(bus, a);
+                self.eor(v);
+                self.cycles += 5 + p as u64;
+            }
 
             // === INC: Increment Memory ===
-            0xE6 => { let (a, _) = self.zp(bus); self.inc(bus, a); self.cycles += 5; }
-            0xF6 => { let (a, _) = self.zpx(bus); self.inc(bus, a); self.cycles += 6; }
-            0xEE => { let (a, _) = self.abs(bus); self.inc(bus, a); self.cycles += 6; }
-            0xFE => { let (a, _) = self.abx(bus); self.inc(bus, a); self.cycles += 7; }
+            0xE6 => {
+                let (a, _) = self.zp(bus);
+                self.inc(bus, a);
+                self.cycles += 5;
+            }
+            0xF6 => {
+                let (a, _) = self.zpx(bus);
+                self.inc(bus, a);
+                self.cycles += 6;
+            }
+            0xEE => {
+                let (a, _) = self.abs(bus);
+                self.inc(bus, a);
+                self.cycles += 6;
+            }
+            0xFE => {
+                let (a, _) = self.abx(bus);
+                self.inc(bus, a);
+                self.cycles += 7;
+            }
 
             // === INX: Increment X ===
-            0xE8 => { self.x = self.x.wrapping_add(1); self.set_nz(self.x); self.cycles += 2; }
+            0xE8 => {
+                self.x = self.x.wrapping_add(1);
+                self.set_nz(self.x);
+                self.cycles += 2;
+            }
 
             // === INY: Increment Y ===
-            0xC8 => { self.y = self.y.wrapping_add(1); self.set_nz(self.y); self.cycles += 2; }
+            0xC8 => {
+                self.y = self.y.wrapping_add(1);
+                self.set_nz(self.y);
+                self.cycles += 2;
+            }
 
             // === JMP: Jump ===
-            0x4C => { let (a, _) = self.abs(bus); self.pc = a; self.cycles += 3; }
+            0x4C => {
+                let (a, _) = self.abs(bus);
+                self.pc = a;
+                self.cycles += 3;
+            }
             0x6C => {
                 let addr = self.abs_addr(bus);
                 // 6502 bug: JMP indirect wraps page
@@ -324,74 +623,275 @@ impl Cpu {
             }
 
             // === LDA: Load Accumulator ===
-            0xA9 => { let v = self.imm(bus); self.a = v; self.set_nz(self.a); self.cycles += 2; }
-            0xA5 => { let (a, _) = self.zp(bus); self.a = self.read_bus(bus, a); self.set_nz(self.a); self.cycles += 3; }
-            0xB5 => { let (a, _) = self.zpx(bus); self.a = self.read_bus(bus, a); self.set_nz(self.a); self.cycles += 4; }
-            0xAD => { let (a, _) = self.abs(bus); self.a = self.read_bus(bus, a); self.set_nz(self.a); self.cycles += 4; }
-            0xBD => { let (a, p) = self.abx(bus); self.a = self.read_bus(bus, a); self.set_nz(self.a); self.cycles += 4 + p as u64; }
-            0xB9 => { let (a, p) = self.aby(bus); self.a = self.read_bus(bus, a); self.set_nz(self.a); self.cycles += 4 + p as u64; }
-            0xA1 => { let (a, _) = self.izx(bus); self.a = self.read_bus(bus, a); self.set_nz(self.a); self.cycles += 6; }
-            0xB1 => { let (a, p) = self.izy(bus); self.a = self.read_bus(bus, a); self.set_nz(self.a); self.cycles += 5 + p as u64; }
+            0xA9 => {
+                let v = self.imm(bus);
+                self.a = v;
+                self.set_nz(self.a);
+                self.cycles += 2;
+            }
+            0xA5 => {
+                let (a, _) = self.zp(bus);
+                self.a = self.read_bus(bus, a);
+                self.set_nz(self.a);
+                self.cycles += 3;
+            }
+            0xB5 => {
+                let (a, _) = self.zpx(bus);
+                self.a = self.read_bus(bus, a);
+                self.set_nz(self.a);
+                self.cycles += 4;
+            }
+            0xAD => {
+                let (a, _) = self.abs(bus);
+                self.a = self.read_bus(bus, a);
+                self.set_nz(self.a);
+                self.cycles += 4;
+            }
+            0xBD => {
+                let (a, p) = self.abx(bus);
+                self.a = self.read_bus(bus, a);
+                self.set_nz(self.a);
+                self.cycles += 4 + p as u64;
+            }
+            0xB9 => {
+                let (a, p) = self.aby(bus);
+                self.a = self.read_bus(bus, a);
+                self.set_nz(self.a);
+                self.cycles += 4 + p as u64;
+            }
+            0xA1 => {
+                let (a, _) = self.izx(bus);
+                self.a = self.read_bus(bus, a);
+                self.set_nz(self.a);
+                self.cycles += 6;
+            }
+            0xB1 => {
+                let (a, p) = self.izy(bus);
+                self.a = self.read_bus(bus, a);
+                self.set_nz(self.a);
+                self.cycles += 5 + p as u64;
+            }
 
             // === LDX: Load X ===
-            0xA2 => { let v = self.imm(bus); self.x = v; self.set_nz(self.x); self.cycles += 2; }
-            0xA6 => { let (a, _) = self.zp(bus); self.x = self.read_bus(bus, a); self.set_nz(self.x); self.cycles += 3; }
-            0xB6 => { let (a, _) = self.zpy(bus); self.x = self.read_bus(bus, a); self.set_nz(self.x); self.cycles += 4; }
-            0xAE => { let (a, _) = self.abs(bus); self.x = self.read_bus(bus, a); self.set_nz(self.x); self.cycles += 4; }
-            0xBE => { let (a, p) = self.aby(bus); self.x = self.read_bus(bus, a); self.set_nz(self.x); self.cycles += 4 + p as u64; }
+            0xA2 => {
+                let v = self.imm(bus);
+                self.x = v;
+                self.set_nz(self.x);
+                self.cycles += 2;
+            }
+            0xA6 => {
+                let (a, _) = self.zp(bus);
+                self.x = self.read_bus(bus, a);
+                self.set_nz(self.x);
+                self.cycles += 3;
+            }
+            0xB6 => {
+                let (a, _) = self.zpy(bus);
+                self.x = self.read_bus(bus, a);
+                self.set_nz(self.x);
+                self.cycles += 4;
+            }
+            0xAE => {
+                let (a, _) = self.abs(bus);
+                self.x = self.read_bus(bus, a);
+                self.set_nz(self.x);
+                self.cycles += 4;
+            }
+            0xBE => {
+                let (a, p) = self.aby(bus);
+                self.x = self.read_bus(bus, a);
+                self.set_nz(self.x);
+                self.cycles += 4 + p as u64;
+            }
 
             // === LDY: Load Y ===
-            0xA0 => { let v = self.imm(bus); self.y = v; self.set_nz(self.y); self.cycles += 2; }
-            0xA4 => { let (a, _) = self.zp(bus); self.y = self.read_bus(bus, a); self.set_nz(self.y); self.cycles += 3; }
-            0xB4 => { let (a, _) = self.zpx(bus); self.y = self.read_bus(bus, a); self.set_nz(self.y); self.cycles += 4; }
-            0xAC => { let (a, _) = self.abs(bus); self.y = self.read_bus(bus, a); self.set_nz(self.y); self.cycles += 4; }
-            0xBC => { let (a, p) = self.abx(bus); self.y = self.read_bus(bus, a); self.set_nz(self.y); self.cycles += 4 + p as u64; }
+            0xA0 => {
+                let v = self.imm(bus);
+                self.y = v;
+                self.set_nz(self.y);
+                self.cycles += 2;
+            }
+            0xA4 => {
+                let (a, _) = self.zp(bus);
+                self.y = self.read_bus(bus, a);
+                self.set_nz(self.y);
+                self.cycles += 3;
+            }
+            0xB4 => {
+                let (a, _) = self.zpx(bus);
+                self.y = self.read_bus(bus, a);
+                self.set_nz(self.y);
+                self.cycles += 4;
+            }
+            0xAC => {
+                let (a, _) = self.abs(bus);
+                self.y = self.read_bus(bus, a);
+                self.set_nz(self.y);
+                self.cycles += 4;
+            }
+            0xBC => {
+                let (a, p) = self.abx(bus);
+                self.y = self.read_bus(bus, a);
+                self.set_nz(self.y);
+                self.cycles += 4 + p as u64;
+            }
 
             // === LSR: Logical Shift Right ===
-            0x4A => { self.lsr_acc(); self.cycles += 2; }
-            0x46 => { let (a, _) = self.zp(bus); self.lsr_mem(bus, a); self.cycles += 5; }
-            0x56 => { let (a, _) = self.zpx(bus); self.lsr_mem(bus, a); self.cycles += 6; }
-            0x4E => { let (a, _) = self.abs(bus); self.lsr_mem(bus, a); self.cycles += 6; }
-            0x5E => { let (a, _) = self.abx(bus); self.lsr_mem(bus, a); self.cycles += 7; }
+            0x4A => {
+                self.lsr_acc();
+                self.cycles += 2;
+            }
+            0x46 => {
+                let (a, _) = self.zp(bus);
+                self.lsr_mem(bus, a);
+                self.cycles += 5;
+            }
+            0x56 => {
+                let (a, _) = self.zpx(bus);
+                self.lsr_mem(bus, a);
+                self.cycles += 6;
+            }
+            0x4E => {
+                let (a, _) = self.abs(bus);
+                self.lsr_mem(bus, a);
+                self.cycles += 6;
+            }
+            0x5E => {
+                let (a, _) = self.abx(bus);
+                self.lsr_mem(bus, a);
+                self.cycles += 7;
+            }
 
             // === NOP: No Operation ===
-            0xEA => { self.cycles += 2; }
+            0xEA => {
+                self.cycles += 2;
+            }
 
             // === ORA: Logical Inclusive OR ===
-            0x09 => { let v = self.imm(bus); self.ora(v); self.cycles += 2; }
-            0x05 => { let (a, _) = self.zp(bus); let v = self.read_bus(bus, a); self.ora(v); self.cycles += 3; }
-            0x15 => { let (a, _) = self.zpx(bus); let v = self.read_bus(bus, a); self.ora(v); self.cycles += 4; }
-            0x0D => { let (a, _) = self.abs(bus); let v = self.read_bus(bus, a); self.ora(v); self.cycles += 4; }
-            0x1D => { let (a, p) = self.abx(bus); let v = self.read_bus(bus, a); self.ora(v); self.cycles += 4 + p as u64; }
-            0x19 => { let (a, p) = self.aby(bus); let v = self.read_bus(bus, a); self.ora(v); self.cycles += 4 + p as u64; }
-            0x01 => { let (a, _) = self.izx(bus); let v = self.read_bus(bus, a); self.ora(v); self.cycles += 6; }
-            0x11 => { let (a, p) = self.izy(bus); let v = self.read_bus(bus, a); self.ora(v); self.cycles += 5 + p as u64; }
+            0x09 => {
+                let v = self.imm(bus);
+                self.ora(v);
+                self.cycles += 2;
+            }
+            0x05 => {
+                let (a, _) = self.zp(bus);
+                let v = self.read_bus(bus, a);
+                self.ora(v);
+                self.cycles += 3;
+            }
+            0x15 => {
+                let (a, _) = self.zpx(bus);
+                let v = self.read_bus(bus, a);
+                self.ora(v);
+                self.cycles += 4;
+            }
+            0x0D => {
+                let (a, _) = self.abs(bus);
+                let v = self.read_bus(bus, a);
+                self.ora(v);
+                self.cycles += 4;
+            }
+            0x1D => {
+                let (a, p) = self.abx(bus);
+                let v = self.read_bus(bus, a);
+                self.ora(v);
+                self.cycles += 4 + p as u64;
+            }
+            0x19 => {
+                let (a, p) = self.aby(bus);
+                let v = self.read_bus(bus, a);
+                self.ora(v);
+                self.cycles += 4 + p as u64;
+            }
+            0x01 => {
+                let (a, _) = self.izx(bus);
+                let v = self.read_bus(bus, a);
+                self.ora(v);
+                self.cycles += 6;
+            }
+            0x11 => {
+                let (a, p) = self.izy(bus);
+                let v = self.read_bus(bus, a);
+                self.ora(v);
+                self.cycles += 5 + p as u64;
+            }
 
             // === PHA: Push Accumulator ===
-            0x48 => { self.push(bus, self.a); self.cycles += 3; }
+            0x48 => {
+                self.push(bus, self.a);
+                self.cycles += 3;
+            }
 
             // === PHP: Push Processor Status ===
-            0x08 => { self.push(bus, self.ps | FLAG_B | FLAG_U); self.cycles += 3; }
+            0x08 => {
+                self.push(bus, self.ps | FLAG_B | FLAG_U);
+                self.cycles += 3;
+            }
 
             // === PLA: Pull Accumulator ===
-            0x68 => { self.a = self.pop(bus); self.set_nz(self.a); self.cycles += 4; }
+            0x68 => {
+                self.a = self.pop(bus);
+                self.set_nz(self.a);
+                self.cycles += 4;
+            }
 
             // === PLP: Pull Processor Status ===
-            0x28 => { self.ps = (self.pop(bus) & !FLAG_B) | FLAG_U; self.cycles += 4; }
+            0x28 => {
+                self.ps = (self.pop(bus) & !FLAG_B) | FLAG_U;
+                self.cycles += 4;
+            }
 
             // === ROL: Rotate Left ===
-            0x2A => { self.rol_acc(); self.cycles += 2; }
-            0x26 => { let (a, _) = self.zp(bus); self.rol_mem(bus, a); self.cycles += 5; }
-            0x36 => { let (a, _) = self.zpx(bus); self.rol_mem(bus, a); self.cycles += 6; }
-            0x2E => { let (a, _) = self.abs(bus); self.rol_mem(bus, a); self.cycles += 6; }
-            0x3E => { let (a, _) = self.abx(bus); self.rol_mem(bus, a); self.cycles += 7; }
+            0x2A => {
+                self.rol_acc();
+                self.cycles += 2;
+            }
+            0x26 => {
+                let (a, _) = self.zp(bus);
+                self.rol_mem(bus, a);
+                self.cycles += 5;
+            }
+            0x36 => {
+                let (a, _) = self.zpx(bus);
+                self.rol_mem(bus, a);
+                self.cycles += 6;
+            }
+            0x2E => {
+                let (a, _) = self.abs(bus);
+                self.rol_mem(bus, a);
+                self.cycles += 6;
+            }
+            0x3E => {
+                let (a, _) = self.abx(bus);
+                self.rol_mem(bus, a);
+                self.cycles += 7;
+            }
 
             // === ROR: Rotate Right ===
-            0x6A => { self.ror_acc(); self.cycles += 2; }
-            0x66 => { let (a, _) = self.zp(bus); self.ror_mem(bus, a); self.cycles += 5; }
-            0x76 => { let (a, _) = self.zpx(bus); self.ror_mem(bus, a); self.cycles += 6; }
-            0x6E => { let (a, _) = self.abs(bus); self.ror_mem(bus, a); self.cycles += 6; }
-            0x7E => { let (a, _) = self.abx(bus); self.ror_mem(bus, a); self.cycles += 7; }
+            0x6A => {
+                self.ror_acc();
+                self.cycles += 2;
+            }
+            0x66 => {
+                let (a, _) = self.zp(bus);
+                self.ror_mem(bus, a);
+                self.cycles += 5;
+            }
+            0x76 => {
+                let (a, _) = self.zpx(bus);
+                self.ror_mem(bus, a);
+                self.cycles += 6;
+            }
+            0x6E => {
+                let (a, _) = self.abs(bus);
+                self.ror_mem(bus, a);
+                self.cycles += 6;
+            }
+            0x7E => {
+                let (a, _) = self.abx(bus);
+                self.ror_mem(bus, a);
+                self.cycles += 7;
+            }
 
             // === RTI: Return from Interrupt ===
             0x40 => {
@@ -411,64 +911,187 @@ impl Cpu {
             }
 
             // === SBC: Subtract with Carry ===
-            0xE9 => { let v = self.imm(bus); self.sbc(v); self.cycles += 2; }
-            0xE5 => { let (a, _) = self.zp(bus); let v = self.read_bus(bus, a); self.sbc(v); self.cycles += 3; }
-            0xF5 => { let (a, _) = self.zpx(bus); let v = self.read_bus(bus, a); self.sbc(v); self.cycles += 4; }
-            0xED => { let (a, _) = self.abs(bus); let v = self.read_bus(bus, a); self.sbc(v); self.cycles += 4; }
-            0xFD => { let (a, p) = self.abx(bus); let v = self.read_bus(bus, a); self.sbc(v); self.cycles += 4 + p as u64; }
-            0xF9 => { let (a, p) = self.aby(bus); let v = self.read_bus(bus, a); self.sbc(v); self.cycles += 4 + p as u64; }
-            0xE1 => { let (a, _) = self.izx(bus); let v = self.read_bus(bus, a); self.sbc(v); self.cycles += 6; }
-            0xF1 => { let (a, p) = self.izy(bus); let v = self.read_bus(bus, a); self.sbc(v); self.cycles += 5 + p as u64; }
+            0xE9 => {
+                let v = self.imm(bus);
+                self.sbc(v);
+                self.cycles += 2;
+            }
+            0xE5 => {
+                let (a, _) = self.zp(bus);
+                let v = self.read_bus(bus, a);
+                self.sbc(v);
+                self.cycles += 3;
+            }
+            0xF5 => {
+                let (a, _) = self.zpx(bus);
+                let v = self.read_bus(bus, a);
+                self.sbc(v);
+                self.cycles += 4;
+            }
+            0xED => {
+                let (a, _) = self.abs(bus);
+                let v = self.read_bus(bus, a);
+                self.sbc(v);
+                self.cycles += 4;
+            }
+            0xFD => {
+                let (a, p) = self.abx(bus);
+                let v = self.read_bus(bus, a);
+                self.sbc(v);
+                self.cycles += 4 + p as u64;
+            }
+            0xF9 => {
+                let (a, p) = self.aby(bus);
+                let v = self.read_bus(bus, a);
+                self.sbc(v);
+                self.cycles += 4 + p as u64;
+            }
+            0xE1 => {
+                let (a, _) = self.izx(bus);
+                let v = self.read_bus(bus, a);
+                self.sbc(v);
+                self.cycles += 6;
+            }
+            0xF1 => {
+                let (a, p) = self.izy(bus);
+                let v = self.read_bus(bus, a);
+                self.sbc(v);
+                self.cycles += 5 + p as u64;
+            }
 
             // === SEC: Set Carry ===
-            0x38 => { self.ps |= FLAG_C; self.cycles += 2; }
+            0x38 => {
+                self.ps |= FLAG_C;
+                self.cycles += 2;
+            }
 
             // === SED: Set Decimal ===
-            0xF8 => { self.ps |= FLAG_D; self.cycles += 2; }
+            0xF8 => {
+                self.ps |= FLAG_D;
+                self.cycles += 2;
+            }
 
             // === SEI: Set Interrupt Disable ===
-            0x78 => { self.ps |= FLAG_I; self.cycles += 2; }
+            0x78 => {
+                self.ps |= FLAG_I;
+                self.cycles += 2;
+            }
 
             // === STA: Store Accumulator ===
-            0x85 => { let (a, _) = self.zp(bus); bus.write(a, self.a); self.cycles += 3; }
-            0x95 => { let (a, _) = self.zpx(bus); bus.write(a, self.a); self.cycles += 4; }
-            0x8D => { let (a, _) = self.abs(bus); bus.write(a, self.a); self.cycles += 4; }
-            0x9D => { let (a, _) = self.abx(bus); bus.write(a, self.a); self.cycles += 5; }
-            0x99 => { let (a, _) = self.aby(bus); bus.write(a, self.a); self.cycles += 5; }
-            0x81 => { let (a, _) = self.izx(bus); bus.write(a, self.a); self.cycles += 6; }
-            0x91 => { let (a, _) = self.izy(bus); bus.write(a, self.a); self.cycles += 6; }
+            0x85 => {
+                let (a, _) = self.zp(bus);
+                bus.write(a, self.a);
+                self.cycles += 3;
+            }
+            0x95 => {
+                let (a, _) = self.zpx(bus);
+                bus.write(a, self.a);
+                self.cycles += 4;
+            }
+            0x8D => {
+                let (a, _) = self.abs(bus);
+                bus.write(a, self.a);
+                self.cycles += 4;
+            }
+            0x9D => {
+                let (a, _) = self.abx(bus);
+                bus.write(a, self.a);
+                self.cycles += 5;
+            }
+            0x99 => {
+                let (a, _) = self.aby(bus);
+                bus.write(a, self.a);
+                self.cycles += 5;
+            }
+            0x81 => {
+                let (a, _) = self.izx(bus);
+                bus.write(a, self.a);
+                self.cycles += 6;
+            }
+            0x91 => {
+                let (a, _) = self.izy(bus);
+                bus.write(a, self.a);
+                self.cycles += 6;
+            }
 
             // === STX: Store X ===
-            0x86 => { let (a, _) = self.zp(bus); bus.write(a, self.x); self.cycles += 3; }
-            0x96 => { let (a, _) = self.zpy(bus); bus.write(a, self.x); self.cycles += 4; }
-            0x8E => { let (a, _) = self.abs(bus); bus.write(a, self.x); self.cycles += 4; }
+            0x86 => {
+                let (a, _) = self.zp(bus);
+                bus.write(a, self.x);
+                self.cycles += 3;
+            }
+            0x96 => {
+                let (a, _) = self.zpy(bus);
+                bus.write(a, self.x);
+                self.cycles += 4;
+            }
+            0x8E => {
+                let (a, _) = self.abs(bus);
+                bus.write(a, self.x);
+                self.cycles += 4;
+            }
 
             // === STY: Store Y ===
-            0x84 => { let (a, _) = self.zp(bus); bus.write(a, self.y); self.cycles += 3; }
-            0x94 => { let (a, _) = self.zpx(bus); bus.write(a, self.y); self.cycles += 4; }
-            0x8C => { let (a, _) = self.abs(bus); bus.write(a, self.y); self.cycles += 4; }
+            0x84 => {
+                let (a, _) = self.zp(bus);
+                bus.write(a, self.y);
+                self.cycles += 3;
+            }
+            0x94 => {
+                let (a, _) = self.zpx(bus);
+                bus.write(a, self.y);
+                self.cycles += 4;
+            }
+            0x8C => {
+                let (a, _) = self.abs(bus);
+                bus.write(a, self.y);
+                self.cycles += 4;
+            }
 
             // === TAX: Transfer Accumulator to X ===
-            0xAA => { self.x = self.a; self.set_nz(self.x); self.cycles += 2; }
+            0xAA => {
+                self.x = self.a;
+                self.set_nz(self.x);
+                self.cycles += 2;
+            }
 
             // === TAY: Transfer Accumulator to Y ===
-            0xA8 => { self.y = self.a; self.set_nz(self.y); self.cycles += 2; }
+            0xA8 => {
+                self.y = self.a;
+                self.set_nz(self.y);
+                self.cycles += 2;
+            }
 
             // === TSX: Transfer Stack Pointer to X ===
-            0xBA => { self.x = self.sp; self.set_nz(self.x); self.cycles += 2; }
+            0xBA => {
+                self.x = self.sp;
+                self.set_nz(self.x);
+                self.cycles += 2;
+            }
 
             // === TXA: Transfer X to Accumulator ===
-            0x8A => { self.a = self.x; self.set_nz(self.a); self.cycles += 2; }
+            0x8A => {
+                self.a = self.x;
+                self.set_nz(self.a);
+                self.cycles += 2;
+            }
 
             // === TXS: Transfer X to Stack Pointer ===
-            0x9A => { self.sp = self.x; self.cycles += 2; }
+            0x9A => {
+                self.sp = self.x;
+                self.cycles += 2;
+            }
 
             // === TYA: Transfer Y to Accumulator ===
-            0x98 => { self.a = self.y; self.set_nz(self.a); self.cycles += 2; }
+            0x98 => {
+                self.a = self.y;
+                self.set_nz(self.a);
+                self.cycles += 2;
+            }
 
             // Illegal opcodes - treated as NOPs with various sizes
-            0x04 | 0x14 | 0x34 | 0x44 | 0x54 | 0x64 | 0x74 | 0x80 | 0x82 | 0x89 |
-            0xC2 | 0xD4 | 0xE2 | 0xF4 => {
+            0x04 | 0x14 | 0x34 | 0x44 | 0x54 | 0x64 | 0x74 | 0x80 | 0x82 | 0x89 | 0xC2 | 0xD4
+            | 0xE2 | 0xF4 => {
                 // 2-byte NOP
                 self.pc = self.pc.wrapping_add(1);
                 self.cycles += 2;
@@ -601,9 +1224,13 @@ impl Cpu {
         if self.ps & FLAG_D != 0 {
             // BCD mode
             let mut lo = (self.a & 0x0F) + (operand & 0x0F) + (self.ps & FLAG_C);
-            if lo > 9 { lo += 6; }
+            if lo > 9 {
+                lo += 6;
+            }
             let mut hi = (self.a >> 4) + (operand >> 4) + if lo > 0x0F { 1 } else { 0 };
-            if hi > 9 { hi += 6; }
+            if hi > 9 {
+                hi += 6;
+            }
             let result = (lo & 0x0F) | (hi << 4);
             let overflow = (!((self.a ^ operand) & 0x80) & ((self.a ^ (hi << 4)) & 0x80)) != 0;
             self.ps = (self.ps & !(FLAG_N | FLAG_V | FLAG_Z | FLAG_C))
@@ -631,13 +1258,21 @@ impl Cpu {
         if self.ps & FLAG_D != 0 {
             // BCD mode
             let carry = self.ps & FLAG_C;
-            let mut lo = (self.a & 0x0F).wrapping_sub(operand & 0x0F).wrapping_sub(1 - carry);
-            if lo & 0x10 != 0 { lo = lo.wrapping_sub(6); }
-            let mut hi = (self.a >> 4).wrapping_sub(operand >> 4).wrapping_sub(if lo & 0x10 != 0 { 1 } else { 0 });
-            if hi & 0x10 != 0 { hi = hi.wrapping_sub(6); }
+            let mut lo = (self.a & 0x0F)
+                .wrapping_sub(operand & 0x0F)
+                .wrapping_sub(1 - carry);
+            if lo & 0x10 != 0 {
+                lo = lo.wrapping_sub(6);
+            }
+            let mut hi = (self.a >> 4)
+                .wrapping_sub(operand >> 4)
+                .wrapping_sub(if lo & 0x10 != 0 { 1 } else { 0 });
+            if hi & 0x10 != 0 {
+                hi = hi.wrapping_sub(6);
+            }
             let result = (lo & 0x0F) | (hi << 4);
             let raw = self.a as i16 - operand as i16 - (1 - carry) as i16;
-            let overflow = ((self.a ^ operand) & (self.a ^ result as u8) & 0x80) != 0;
+            let overflow = ((self.a ^ operand) & (self.a ^ result) & 0x80) != 0;
             self.ps = (self.ps & !(FLAG_N | FLAG_V | FLAG_Z | FLAG_C))
                 | if raw >= 0 { FLAG_C } else { 0 }
                 | if result == 0 { FLAG_Z } else { 0 }
@@ -787,7 +1422,11 @@ impl Cpu {
             let old_pc = self.pc;
             self.pc = self.pc.wrapping_add(offset as u16);
             // Extra cycle for page crossing
-            if (old_pc & 0xFF00) != (self.pc & 0xFF00) { 2 } else { 1 }
+            if (old_pc & 0xFF00) != (self.pc & 0xFF00) {
+                2
+            } else {
+                1
+            }
         } else {
             0
         }

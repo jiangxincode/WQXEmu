@@ -104,11 +104,9 @@ impl Flash {
         let bank_offset = bank_idx as usize * 0x8000;
 
         match self.step {
-            FlashStep::Idle => {
-                if addr == 0x5555 && value == 0xAA {
-                    self.step = FlashStep::Step1;
-                    return true;
-                }
+            FlashStep::Idle if addr == 0x5555 && value == 0xAA => {
+                self.step = FlashStep::Step1;
+                return true;
             }
             FlashStep::Step1 => {
                 if addr == 0xAAAA && value == 0x55 {
@@ -147,17 +145,15 @@ impl Flash {
             }
             FlashStep::Command => {
                 match self.flash_type {
-                    FlashType::IdMode => {
-                        if value == 0xF0 {
-                            // Exit ID mode
-                            let bank_start = bank_offset + 0x4000;
-                            if bank_start + 2 <= nor.len() {
-                                nor[bank_start] = self.bak1;
-                                nor[bank_start + 1] = self.bak2;
-                            }
-                            self.step = FlashStep::Idle;
-                            return true;
+                    FlashType::IdMode if value == 0xF0 => {
+                        // Exit ID mode
+                        let bank_start = bank_offset + 0x4000;
+                        if bank_start + 2 <= nor.len() {
+                            nor[bank_start] = self.bak1;
+                            nor[bank_start + 1] = self.bak2;
                         }
+                        self.step = FlashStep::Idle;
+                        return true;
                     }
                     FlashType::ByteProgram => {
                         // Byte program: AND the value with existing data
@@ -177,26 +173,24 @@ impl Flash {
                         self.step = FlashStep::Program;
                         return true;
                     }
-                    FlashType::Erase | FlashType::SectorErase | FlashType::ChipErase => {
-                        if addr == 0x5555 && value == 0xAA {
-                            self.step = FlashStep::Program;
-                            return true;
-                        }
+                    FlashType::Erase | FlashType::SectorErase | FlashType::ChipErase
+                        if addr == 0x5555 && value == 0xAA =>
+                    {
+                        self.step = FlashStep::Program;
+                        return true;
                     }
                     _ => {}
                 }
             }
-            FlashStep::Program => {
-                match self.flash_type {
-                    FlashType::Erase | FlashType::SectorErase | FlashType::ChipErase => {
-                        if addr == 0xAAAA && value == 0x55 {
-                            self.step = FlashStep::EraseSector;
-                            return true;
-                        }
-                    }
-                    _ => {}
+            FlashStep::Program => match self.flash_type {
+                FlashType::Erase | FlashType::SectorErase | FlashType::ChipErase
+                    if addr == 0xAAAA && value == 0x55 =>
+                {
+                    self.step = FlashStep::EraseSector;
+                    return true;
                 }
-            }
+                _ => {}
+            },
             FlashStep::EraseSector => {
                 if addr == 0x5555 && value == 0x10 {
                     // Chip erase

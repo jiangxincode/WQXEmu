@@ -178,7 +178,7 @@ impl Memory {
     }
 
     /// Update BBS pages based on current volume
-    pub fn update_bbs_pages(&mut self, rom: &[u8], nor: &[u8]) {
+    pub fn update_bbs_pages(&mut self, rom: &[u8], _nor: &[u8]) {
         let volume_offset = match self.current_volume & 0x03 {
             0x01 => 0x100, // Volume 1
             0x03 => 0x200, // Volume 2
@@ -190,9 +190,14 @@ impl Memory {
             let bank_offset = bank_idx * BANK_SIZE;
             if bank_offset + BANK_SIZE <= rom.len() {
                 self.bbs_pages[i * 4].copy_from_slice(&rom[bank_offset..bank_offset + PAGE_SIZE]);
-                self.bbs_pages[i * 4 + 1].copy_from_slice(&rom[bank_offset + PAGE_SIZE..bank_offset + 2 * PAGE_SIZE]);
-                self.bbs_pages[i * 4 + 2].copy_from_slice(&rom[bank_offset + 2 * PAGE_SIZE..bank_offset + 3 * PAGE_SIZE]);
-                self.bbs_pages[i * 4 + 3].copy_from_slice(&rom[bank_offset + 3 * PAGE_SIZE..bank_offset + 4 * PAGE_SIZE]);
+                self.bbs_pages[i * 4 + 1]
+                    .copy_from_slice(&rom[bank_offset + PAGE_SIZE..bank_offset + 2 * PAGE_SIZE]);
+                self.bbs_pages[i * 4 + 2].copy_from_slice(
+                    &rom[bank_offset + 2 * PAGE_SIZE..bank_offset + 3 * PAGE_SIZE],
+                );
+                self.bbs_pages[i * 4 + 3].copy_from_slice(
+                    &rom[bank_offset + 3 * PAGE_SIZE..bank_offset + 4 * PAGE_SIZE],
+                );
             }
         }
         // Page 1 of BBS is RAM page 3
@@ -227,9 +232,14 @@ impl Memory {
             let bank_offset = bank_idx * BANK_SIZE;
             if bank_offset + BANK_SIZE <= rom.len() {
                 self.bbs_pages[i * 4].copy_from_slice(&rom[bank_offset..bank_offset + PAGE_SIZE]);
-                self.bbs_pages[i * 4 + 1].copy_from_slice(&rom[bank_offset + PAGE_SIZE..bank_offset + 2 * PAGE_SIZE]);
-                self.bbs_pages[i * 4 + 2].copy_from_slice(&rom[bank_offset + 2 * PAGE_SIZE..bank_offset + 3 * PAGE_SIZE]);
-                self.bbs_pages[i * 4 + 3].copy_from_slice(&rom[bank_offset + 3 * PAGE_SIZE..bank_offset + 4 * PAGE_SIZE]);
+                self.bbs_pages[i * 4 + 1]
+                    .copy_from_slice(&rom[bank_offset + PAGE_SIZE..bank_offset + 2 * PAGE_SIZE]);
+                self.bbs_pages[i * 4 + 2].copy_from_slice(
+                    &rom[bank_offset + 2 * PAGE_SIZE..bank_offset + 3 * PAGE_SIZE],
+                );
+                self.bbs_pages[i * 4 + 3].copy_from_slice(
+                    &rom[bank_offset + 3 * PAGE_SIZE..bank_offset + 4 * PAGE_SIZE],
+                );
             }
         }
         // BBS page 1 is always RAM page 3

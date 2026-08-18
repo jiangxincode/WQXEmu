@@ -7,7 +7,7 @@ use anyhow::Result;
 use clap::Parser;
 use minifb::{Key, Window, WindowOptions};
 
-use wqxemu_core::{Emulator, key_ids, LCD_HEIGHT, LCD_WIDTH};
+use wqxemu_core::{key_ids, Emulator, LCD_HEIGHT, LCD_WIDTH};
 
 /// WQXEmu - Wenquxing NC1020 Emulator
 #[derive(Parser)]
@@ -151,22 +151,25 @@ fn main() -> Result<()> {
     .expect("Failed to create window");
 
     // Limit to ~30 fps
-    window.limit_update_rate(Some(std::time::Duration::from_micros(33333)));
+    window.set_target_fps(30);
 
     // Main event loop
     let mut last_key_state: std::collections::HashMap<u8, bool> = std::collections::HashMap::new();
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
         // Process input
-        window.get_keys_pressed(minifb::KeyRepeat::No).iter().for_each(|key| {
-            if let Some(key_id) = map_key(*key) {
-                let was_pressed = last_key_state.get(&key_id).copied().unwrap_or(false);
-                if !was_pressed {
-                    emu.set_key(key_id, true);
-                    last_key_state.insert(key_id, true);
+        window
+            .get_keys_pressed(minifb::KeyRepeat::No)
+            .iter()
+            .for_each(|key| {
+                if let Some(key_id) = map_key(*key) {
+                    let was_pressed = last_key_state.get(&key_id).copied().unwrap_or(false);
+                    if !was_pressed {
+                        emu.set_key(key_id, true);
+                        last_key_state.insert(key_id, true);
+                    }
                 }
-            }
-        });
+            });
 
         window.get_keys_released().iter().for_each(|key| {
             if let Some(key_id) = map_key(*key) {

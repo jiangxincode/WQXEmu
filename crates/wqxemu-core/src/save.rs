@@ -36,6 +36,7 @@ pub struct SaveState {
 
 impl SaveState {
     /// Create a new save state from current emulator state
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         cpu: &crate::cpu::Cpu,
         ram: &[u8],
@@ -67,8 +68,7 @@ impl SaveState {
 
     /// Deserialize save state from bytes
     pub fn deserialize(data: &[u8]) -> Result<Self> {
-        let state: Self = bincode::deserialize(data)
-            .context("Failed to deserialize save state")?;
+        let state: Self = bincode::deserialize(data).context("Failed to deserialize save state")?;
 
         if state.version != SAVE_STATE_VERSION {
             anyhow::bail!(
