@@ -34,19 +34,27 @@ A Wenquxing electronic dictionary emulator written in Rust, using Low-Level Emul
 ## Quick Start
 
 ```bash
-# Build and run the standalone emulator
-cargo run --release -- path/to/nc1020.rom
+# The commands below assume a roms/ directory at the repository root
+# (the test dumps are already there locally; ROMs are not distributed):
 
-# Run a different model (or let it auto-detect from the ROM files)
-cargo run --release -- --model nc2000 -n roms/nc2000.nor --nand-path roms/nc2000.nand
+# NC1020 (24MB ROM + 1MB NOR)
+cargo run --release -- roms/nc1020/obj_lu.bin -n roms/nc1020/nc1020.fls
+
+# NC2000 boots from NOR + NAND (the first-plane dump is required)
+cargo run --release -- --model nc2000 -n roms/nc2000/nc2000.nor --nand-path roms/nc2000/nc2000.nand --nand0-path roms/nc2000/nc2000.nand0
+
+# PC1000 scaffolding is in place but not bootable yet
 cargo run --release -- --model pc1000 roms/pc1000.rom -n roms/pc1000.nor
 
 # Run headless for 300 frames and save a screenshot to the given path
-cargo run --release -- path/to/nc1020.rom --screenshot screenshot.png --screenshot-frames 300
+cargo run --release -- roms/nc1020/obj_lu.bin -n roms/nc1020/nc1020.fls --screenshot screenshot.png --screenshot-frames 300
 
 # Build the libretro core for RetroArch
 cargo build -p wqxemu-libretro --release
 ```
+
+ROM dumps are not distributed with the repository (the local `roms/`
+directory is git-ignored); prepare your own dumps using the layout above.
 
 ## Building
 
