@@ -32,8 +32,8 @@ struct Args {
     #[arg(long, help = "Path to the first NAND plane file")]
     nand0_path: Option<String>,
 
-    /// Hardware model: nc1020, pc1000 or nc2000 (default: auto-detect)
-    #[arg(long, help = "Hardware model (nc1020, pc1000, nc2000)")]
+    /// Hardware model: nc1020, pc1000, cc800 or nc2000 (default: auto-detect)
+    #[arg(long, help = "Hardware model (nc1020, pc1000, cc800, nc2000)")]
     model: Option<String>,
 
     /// Scale factor for the display
@@ -52,11 +52,11 @@ struct Args {
 /// Map minifb key to a key ID for the given model.
 ///
 /// Key IDs encode the 8x8 matrix position: row = key_id >> 3,
-/// col = key_id & 7. The PC1000 uses a different physical matrix than the
-/// NC1020/NC2000, so the mapping is model-specific.
+/// col = key_id & 7. The PC1000/CC800 use a different physical matrix
+/// than the NC1020/NC2000, so the mapping is model-specific.
 fn map_key(model: MachineModel, key: Key) -> Option<u8> {
     match model {
-        MachineModel::Pc1000 => map_key_pc1000(key),
+        MachineModel::Pc1000 | MachineModel::Cc800 => map_key_pc1000(key),
         _ => map_key_nc1020(key),
     }
 }

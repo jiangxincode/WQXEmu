@@ -60,6 +60,7 @@ pub struct RomFiles {
 |-------|-----------|--------|
 | `nc1020.rs` | 24MB ROM (`obj_lu.bin`) + 1MB NOR | Complete, boots to menu |
 | `pc1000.rs` | 12MB ROM (`pc1000.rom` = obj1+obj2+obj3) + 512KB NOR | Complete, boots to menu, keyboard + NOR work |
+| `cc800.rs` | 16MB ROM (`obj.bin`) + 512KB NOR | Complete, boots to menu, keyboard + NOR work |
 | `nc2000.rs` | NOR + NAND (`*.nor` / `*.nand`) | Boots to clock screen, standby/wake works |
 
 ### NC1020
@@ -102,6 +103,38 @@ pub struct RomFiles {
   direction registers. Verified with the official PC1000 3.9 firmware:
   cold boot draws the main menu, arrows change the selection, and NOR
   user data persists.
+
+### CC800
+
+- The CC800 is the older sibling of the PC1000 and shares the SPDC1016
+  SoC. Its 16MB `obj.bin` ROM and 512KB NOR are stored with the
+  half-swapped 16KB bank convention (like the NC1020) and are unswapped
+  on load.
+- Bank window (0x4000-0xBFFF) page order is `{+0x0000, +0x2000, +0x4000,
+  +0x6000}` inside each 32KB bank — different from the PC1000. With ROA
+  set the window selects one of the 16 NOR banks; with ROA clear it
+  selects a BROM bank (0x0D bit0 picks volume 1, the second 8MB).
+- Bank 0 with ROA clear maps 0x4000-0x7FFF onto internal RAM (0x6000
+  mirrors 0x4000) so the firmware can copy itself into RAM at boot;
+  volume 1 bank 0 maps 0x4000-0x7FFF onto NOR page 0 instead.
+- 0xC000-0xDFFF is the BBS page (0x0A bits 0-3); page 1 is internal RAM
+  (or NOR + 0x2000 with volume 1). 0xE000-0xFFFF is the fixed BIOS page
+  (volume bank 0 + 0x2000); the reset vector is 0xFFF4.
+- IO follows the Sim800 register model: timer start/stop via reads of
+  0x04-0x07 (returning the corresponding IO register), interrupt status
+  at 0x01 (clear-on-read), timer A/B at 0x10-0x14, keypad ports
+  0x08/0x09/0x0F/0x15 with an 8x8 port-conduction matrix, LCD address
+  from register 0x06 (address << 4), JG WAV control at 0x20, beeper at
+  0x18.
+- Periodic sources match the shared SPDC1016 model: timer0/1 and timer A
+  at 576*50 Hz ticks, time base at ~250 Hz, NMI at 2 Hz.
+- Standby/wake: when the firmware clears the LCD clock (0x05 low
+  nibble) the device enters standby; pressing the power/hotkey rows
+  triggers a watchdog warm reset.
+- Keypad layout is identical to the PC1000 (same matrix positions), so
+  the desktop frontend reuses the PC1000 key mapping. Verified with the
+  official CC800 2.x firmware: cold boot draws the main menu and arrows
+  change the selection.
 
 ### NC2000
 
@@ -149,7 +182,8 @@ kept as a convenience for the NC1020 case. The frame loop calls
 
 - Standalone frontend: `--model nc1020|pc1000|nc2000`, or auto-detection
   via `detect_model(&files)` (NAND present → NC2000; 24MB ROM → NC1020;
-  12MB/16MB ROM → PC1000; otherwise NC1020 default).
+  12MB ROM → PC1000; 16MB ROM with a volume-1 boot page at 8MB → CC800;
+  otherwise NC1020 default).
 - libretro core: classifies the loaded file by extension
   (`.nand`/`.nand0`/`.fls`/`.nor`/other) and picks up sibling files with
   the same stem, then runs the same auto-detection.

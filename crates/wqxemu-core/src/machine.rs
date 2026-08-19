@@ -20,6 +20,8 @@ pub enum MachineModel {
     Nc1020,
     /// PC1000 (different bank layout and IO semantics)
     Pc1000,
+    /// CC800 (older SPDC1016 SoC, half-swapped ROM/NOR dumps)
+    Cc800,
     /// NC2000 (ROM is replaced by NAND Flash)
     Nc2000,
 }
@@ -30,6 +32,7 @@ impl MachineModel {
         match self {
             MachineModel::Nc1020 => "nc1020",
             MachineModel::Pc1000 => "pc1000",
+            MachineModel::Cc800 => "cc800",
             MachineModel::Nc2000 => "nc2000",
         }
     }
@@ -39,6 +42,7 @@ impl MachineModel {
         match name.to_ascii_lowercase().as_str() {
             "nc1020" => Some(MachineModel::Nc1020),
             "pc1000" => Some(MachineModel::Pc1000),
+            "cc800" => Some(MachineModel::Cc800),
             "nc2000" => Some(MachineModel::Nc2000),
             _ => None,
         }
