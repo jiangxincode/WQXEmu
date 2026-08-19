@@ -49,8 +49,20 @@ struct Args {
     screenshot_frames: u32,
 }
 
-/// Map minifb key to NC1020 key ID
-fn map_key(key: Key) -> Option<u8> {
+/// Map minifb key to a key ID for the given model.
+///
+/// Key IDs encode the 8x8 matrix position: row = key_id >> 3,
+/// col = key_id & 7. The PC1000 uses a different physical matrix than the
+/// NC1020/NC2000, so the mapping is model-specific.
+fn map_key(model: MachineModel, key: Key) -> Option<u8> {
+    match model {
+        MachineModel::Pc1000 => map_key_pc1000(key),
+        _ => map_key_nc1020(key),
+    }
+}
+
+/// Map minifb key to NC1020/NC2000 key ID.
+fn map_key_nc1020(key: Key) -> Option<u8> {
     match key {
         // Arrow keys
         Key::Up => Some(key_ids::UP),
@@ -129,6 +141,89 @@ fn map_key(key: Key) -> Option<u8> {
     }
 }
 
+/// Map minifb key to PC1000 key ID (matrix position).
+///
+/// PC1000 matrix layout (from the PC1000 reference keymap):
+///   row 0: ON/OFF        row 4: A S D F G H J K
+///   row 1: 英汉 名片 计算 行程 资料 时间 网络
+///   row 2: 求助 中英数 输入法 跳出 0 . 空格 ←
+///   row 3: Z X C V B N M ⇞
+///   row 5: Q W E R T Y U I
+///   row 6: O L ▲ ▼ P 输入 ⇟ →
+///   row 7: F1 F2 F3 F4
+fn map_key_pc1000(key: Key) -> Option<u8> {
+    let id = |row: u8, col: u8| row << 3 | col;
+    match key {
+        // Arrows / navigation
+        Key::Up => Some(id(6, 2)),
+        Key::Down => Some(id(6, 3)),
+        Key::Left => Some(id(2, 7)),
+        Key::Right => Some(id(6, 7)),
+        Key::Enter => Some(id(6, 5)),
+        Key::Escape => Some(id(2, 3)),
+        Key::Space => Some(id(2, 6)),
+        Key::Backspace => Some(id(7, 3)),
+
+        // Function keys / hotkeys
+        Key::F1 => Some(id(7, 2)),
+        Key::F2 => Some(id(7, 3)),
+        Key::F3 => Some(id(7, 4)),
+        Key::F4 => Some(id(7, 5)),
+        Key::F5 => Some(id(1, 0)),  // 英汉
+        Key::F6 => Some(id(1, 1)),  // 名片
+        Key::F7 => Some(id(1, 2)),  // 计算
+        Key::F8 => Some(id(1, 3)),  // 行程
+        Key::F9 => Some(id(1, 4)),  // 资料
+        Key::F10 => Some(id(1, 5)), // 时间
+        Key::F11 => Some(id(1, 6)), // 网络
+
+        // Power button (Delete)
+        Key::Delete => Some(id(0, 0)),
+
+        // Letters
+        Key::A => Some(id(4, 0)),
+        Key::B => Some(id(3, 4)),
+        Key::C => Some(id(3, 2)),
+        Key::D => Some(id(4, 2)),
+        Key::E => Some(id(5, 2)),
+        Key::F => Some(id(4, 3)),
+        Key::G => Some(id(4, 4)),
+        Key::H => Some(id(4, 5)),
+        Key::I => Some(id(5, 7)),
+        Key::J => Some(id(4, 6)),
+        Key::K => Some(id(4, 7)),
+        Key::L => Some(id(6, 1)),
+        Key::M => Some(id(3, 6)),
+        Key::N => Some(id(3, 5)),
+        Key::O => Some(id(6, 0)),
+        Key::P => Some(id(6, 4)),
+        Key::Q => Some(id(5, 0)),
+        Key::R => Some(id(5, 3)),
+        Key::S => Some(id(4, 1)),
+        Key::T => Some(id(5, 4)),
+        Key::U => Some(id(5, 6)),
+        Key::V => Some(id(3, 3)),
+        Key::W => Some(id(5, 1)),
+        Key::X => Some(id(3, 1)),
+        Key::Y => Some(id(5, 5)),
+        Key::Z => Some(id(3, 0)),
+
+        // Numbers
+        Key::Key0 => Some(id(2, 4)),
+        Key::Key1 => Some(id(3, 4)),
+        Key::Key2 => Some(id(3, 5)),
+        Key::Key3 => Some(id(3, 6)),
+        Key::Key4 => Some(id(4, 4)),
+        Key::Key5 => Some(id(4, 5)),
+        Key::Key6 => Some(id(4, 6)),
+        Key::Key7 => Some(id(5, 4)),
+        Key::Key8 => Some(id(5, 5)),
+        Key::Key9 => Some(id(5, 6)),
+
+        _ => None,
+    }
+}
+
 fn main() -> Result<()> {
     env_logger::init();
 
@@ -176,7 +271,7 @@ fn main() -> Result<()> {
     let window_height = LCD_HEIGHT * scale;
 
     let mut window = Window::new(
-        "WQXEmu - NC1020",
+        &format!("WQXEmu - {}", model.name().to_uppercase()),
         window_width,
         window_height,
         WindowOptions {
@@ -199,7 +294,7 @@ fn main() -> Result<()> {
             .get_keys_pressed(minifb::KeyRepeat::No)
             .iter()
             .for_each(|key| {
-                if let Some(key_id) = map_key(*key) {
+                if let Some(key_id) = map_key(model, *key) {
                     let was_pressed = last_key_state.get(&key_id).copied().unwrap_or(false);
                     if !was_pressed {
                         emu.set_key(key_id, true);
@@ -209,7 +304,7 @@ fn main() -> Result<()> {
             });
 
         window.get_keys_released().iter().for_each(|key| {
-            if let Some(key_id) = map_key(*key) {
+            if let Some(key_id) = map_key(model, *key) {
                 emu.set_key(key_id, false);
                 last_key_state.insert(key_id, false);
             }

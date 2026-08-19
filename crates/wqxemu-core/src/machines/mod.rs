@@ -26,9 +26,8 @@ pub fn create_machine(model: MachineModel, files: &RomFiles) -> Result<Box<dyn M
 ///
 /// Heuristics:
 /// - NC2000 requires a NAND dump (`*.nand`), which no other model uses.
-/// - NC1020 system ROMs are 24MB dumps (`obj_lu.bin`, `*.rom`).
-/// - PC1000 ROMs are also `.rom` dumps; prefer it when NC1020 heuristics
-///   fail (or when the user explicitly selects it).
+/// - NC1020 system ROMs are 24MB dumps (`obj_lu.bin`).
+/// - PC1000 system ROMs are 12MB dumps (`pc1000.rom`).
 pub fn detect_model(files: &RomFiles) -> MachineModel {
     if files.nand.is_some() || files.nand0.is_some() {
         return MachineModel::Nc2000;
@@ -36,9 +35,15 @@ pub fn detect_model(files: &RomFiles) -> MachineModel {
 
     if let Some(rom) = &files.rom {
         if let Ok(meta) = std::fs::metadata(rom) {
-            // NC1020 uses 24MB (3 x 8MB volume) ROM dumps.
-            if meta.len() == 24 * 1024 * 1024 {
+            let len = meta.len();
+            if len == 24 * 1024 * 1024 {
+                // NC1020 uses 24MB (3 x 8MB volume) ROM dumps.
                 return MachineModel::Nc1020;
+            }
+            if len == 12 * 1024 * 1024 || len == 16 * 1024 * 1024 {
+                // PC1000 uses 12MB (obj1 + obj2 + obj3) or the 16MB
+                // Android/PC1000EMUX buffer layout.
+                return MachineModel::Pc1000;
             }
         }
     }

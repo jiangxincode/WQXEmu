@@ -121,6 +121,15 @@ impl Audio {
         self.output_buffer.clear();
     }
 
+    /// Append one frame worth of constant-level samples (used by machines
+    /// that drive the speaker with a simple 1-bit DAC such as the PC1000
+    /// beeper). The frame rate matches the shared LCD frame rate.
+    pub fn output_frame(&mut self, level: i16) {
+        let samples = SAMPLE_RATE / crate::lcd::FRAME_RATE;
+        self.output_buffer
+            .resize(self.output_buffer.len() + samples as usize, level);
+    }
+
     /// Generate audio samples for one frame (called at 30fps)
     /// Returns the number of samples generated
     pub fn generate_frame_samples(&mut self) -> usize {

@@ -59,7 +59,7 @@ pub struct RomFiles {
 | Model | ROM files | Status |
 |-------|-----------|--------|
 | `nc1020.rs` | 24MB ROM (`obj_lu.bin`) + 1MB NOR | Complete, boots to menu |
-| `pc1000.rs` | ROM + NOR | Skeleton (IO/bank semantics TODO) |
+| `pc1000.rs` | 12MB ROM (`pc1000.rom` = obj1+obj2+obj3) + 512KB NOR | Complete, boots to menu, keyboard + NOR work |
 | `nc2000.rs` | NOR + NAND (`*.nor` / `*.nand`) | Boots to clock screen, standby/wake works |
 
 ### NC1020
@@ -72,10 +72,36 @@ pub struct RomFiles {
 
 ### PC1000
 
-- Different bank window layout and IO semantics (interrupt enable/status,
-  timers, ports). Scaffolding only: the register map is defined in
-  `machines/pc1000.rs` under `io_map`, the bus behaviour is not
-  implemented yet.
+- The ROM dump is stored linearly (no 16KB half swap, unlike the NC1020).
+  12MB = obj1 + obj2 + obj3; volume 0 covers obj1+obj2 (8MB) and volume 1
+  covers obj1 + obj3. The 16MB Android/PC1000EMUX buffer layout is also
+  accepted.
+- Bank window (0x4000-0xBFFF) with register 0x00; page order is
+  `{+0x4000, +0x6000, +0x0000, +0x2000}` inside each 32KB bank. With
+  ROA (0x0A bit7) set the window selects one of the 16 NOR banks; with
+  ROA clear it selects a BROM bank (0x0D bit0 picks volume 1).
+- Bank 0 with ROA clear maps 0x4000-0x7FFF onto internal RAM (0x6000 is
+  a mirror of 0x4000) so the firmware can copy itself into RAM at boot.
+- 0xC000-0xDFFF is the BBS page (0x0A bits 0-3); page 1 is internal RAM.
+  0xE000-0xFFFF is the fixed BIOS page (volume bank 0 + 0x6000); the
+  reset vector for the official 3.9/3.5 firmware is 0xFFF4.
+- IO follows the PC1000EMUX register model: timer start/stop via reads of
+  0x04-0x07, interrupt status at 0x01 (clear-on-read), timer A/B at
+  0x10-0x14, keypad ports 0x08/0x09/0x0B/0x0F/0x15, LCD address from
+  register 0x06 (address << 4), DSP at 0x20-0x23, beeper at 0x18.
+- Periodic sources: timer0/1 and timer A at 576*50 Hz ticks, time base at
+  ~250 Hz (every 115 ticks), NMI at 2 Hz. Interrupt enable is the shadow
+  register 0x40; status register 0x01 keeps its two high bits on read.
+- NOR controller: SPR4096 command sequences (software ID 0xBF/0xD7,
+  byte program, 4KB block erase, mass erase, info block). NOR dumps may
+  be stored linear or with the half-swapped NC1020 convention (detected
+  automatically and unswapped on load; `save_nor` restores the original
+  layout).
+- Keypad: 8x8 matrix; rows 0-5 are scanned through port 1 writes, rows
+  6-7 (hotkeys and power) are read through port 3 with the port
+  direction registers. Verified with the official PC1000 3.9 firmware:
+  cold boot draws the main menu, arrows change the selection, and NOR
+  user data persists.
 
 ### NC2000
 
@@ -123,7 +149,7 @@ kept as a convenience for the NC1020 case. The frame loop calls
 
 - Standalone frontend: `--model nc1020|pc1000|nc2000`, or auto-detection
   via `detect_model(&files)` (NAND present → NC2000; 24MB ROM → NC1020;
-  otherwise NC1020 default).
+  12MB/16MB ROM → PC1000; otherwise NC1020 default).
 - libretro core: classifies the loaded file by extension
   (`.nand`/`.nand0`/`.fls`/`.nor`/other) and picks up sibling files with
   the same stem, then runs the same auto-detection.
