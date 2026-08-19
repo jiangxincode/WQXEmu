@@ -24,6 +24,8 @@ pub enum MachineModel {
     Cc800,
     /// NC2000 (ROM is replaced by NAND Flash)
     Nc2000,
+    /// NC3000 (10.24 MHz variant, 1MB NOR + two-plane NAND)
+    Nc3000,
 }
 
 impl MachineModel {
@@ -34,6 +36,7 @@ impl MachineModel {
             MachineModel::Pc1000 => "pc1000",
             MachineModel::Cc800 => "cc800",
             MachineModel::Nc2000 => "nc2000",
+            MachineModel::Nc3000 => "nc3000",
         }
     }
 
@@ -44,6 +47,7 @@ impl MachineModel {
             "pc1000" => Some(MachineModel::Pc1000),
             "cc800" => Some(MachineModel::Cc800),
             "nc2000" => Some(MachineModel::Nc2000),
+            "nc3000" => Some(MachineModel::Nc3000),
             _ => None,
         }
     }

@@ -12,6 +12,7 @@ use crate::machine::{Machine, MachineModel, RomFiles};
 pub mod cc800;
 pub mod nc1020;
 pub mod nc2000;
+pub mod nc3000;
 pub mod pc1000;
 
 /// Create a machine for the given model, loading its ROM files.
@@ -21,6 +22,7 @@ pub fn create_machine(model: MachineModel, files: &RomFiles) -> Result<Box<dyn M
         MachineModel::Nc1020 => Ok(Box::new(nc1020::Nc1020Machine::new(files)?)),
         MachineModel::Pc1000 => Ok(Box::new(pc1000::Pc1000Machine::new(files)?)),
         MachineModel::Nc2000 => Ok(Box::new(nc2000::Nc2000Machine::new(files)?)),
+        MachineModel::Nc3000 => Ok(Box::new(nc3000::Nc3000Machine::new(files)?)),
     }
 }
 
@@ -31,8 +33,25 @@ pub fn create_machine(model: MachineModel, files: &RomFiles) -> Result<Box<dyn M
 /// - NC1020 system ROMs are 24MB dumps (`obj_lu.bin`).
 /// - PC1000 system ROMs are 12MB dumps (`pc1000.rom`).
 /// - CC800 system ROMs are 16MB dumps (`obj.bin`).
+/// - NC2000/NC3000 use NOR + NAND dumps (NC3000's NAND is ~66MB and its
+///   NOR is 1MB, while the NC2000's NAND is ~33MB and NOR is 512KB).
 pub fn detect_model(files: &RomFiles) -> MachineModel {
     if files.nand.is_some() || files.nand0.is_some() {
+        // NC3000 NAND dumps are ~69MB (131008 pages); NC2000 are ~34MB.
+        if let Some(nand) = &files.nand {
+            if let Ok(meta) = std::fs::metadata(nand) {
+                if meta.len() > 60 * 1024 * 1024 {
+                    return MachineModel::Nc3000;
+                }
+            }
+        }
+        if let Some(nor) = &files.nor {
+            if let Ok(meta) = std::fs::metadata(nor) {
+                if meta.len() >= 1024 * 1024 {
+                    return MachineModel::Nc3000;
+                }
+            }
+        }
         return MachineModel::Nc2000;
     }
 

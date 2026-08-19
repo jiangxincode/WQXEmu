@@ -32,8 +32,8 @@ struct Args {
     #[arg(long, help = "Path to the first NAND plane file")]
     nand0_path: Option<String>,
 
-    /// Hardware model: nc1020, pc1000, cc800 or nc2000 (default: auto-detect)
-    #[arg(long, help = "Hardware model (nc1020, pc1000, cc800, nc2000)")]
+    /// Hardware model: nc1020, pc1000, cc800, nc2000 or nc3000 (default: auto-detect)
+    #[arg(long, help = "Hardware model (nc1020, pc1000, cc800, nc2000, nc3000)")]
     model: Option<String>,
 
     /// Scale factor for the display
@@ -57,6 +57,7 @@ struct Args {
 fn map_key(model: MachineModel, key: Key) -> Option<u8> {
     match model {
         MachineModel::Pc1000 | MachineModel::Cc800 => map_key_pc1000(key),
+        MachineModel::Nc3000 => map_key_nc3000(key),
         _ => map_key_nc1020(key),
     }
 }
@@ -219,6 +220,84 @@ fn map_key_pc1000(key: Key) -> Option<u8> {
         Key::Key7 => Some(id(5, 4)),
         Key::Key8 => Some(id(5, 5)),
         Key::Key9 => Some(id(5, 6)),
+
+        _ => None,
+    }
+}
+
+/// Map minifb key to NC3000 key ID (matrix position).
+///
+/// The NC3000 shares the standard NC2000-era QWERTY matrix plus its own
+/// hotkey column (col 0): 网络/电源 (0,0), 游戏 (1,0), 计算 (2,0),
+/// 时间 (3,0), 英汉 (5,0), 词库 (6,0), 学习 (7,0).
+fn map_key_nc3000(key: Key) -> Option<u8> {
+    let id = |row: u8, col: u8| row << 3 | col;
+    match key {
+        // Arrows / navigation
+        Key::Up => Some(id(2, 3)),
+        Key::Down => Some(id(3, 3)),
+        Key::Left => Some(id(7, 7)),
+        Key::Right => Some(id(7, 3)),
+        Key::Enter => Some(id(5, 3)),
+        Key::Escape => Some(id(3, 7)),
+        Key::Space => Some(id(6, 7)),
+        Key::Backspace => Some(id(1, 2)), // F2 = 删除
+
+        // Function keys
+        Key::F1 => Some(id(0, 2)),
+        Key::F2 => Some(id(1, 2)),
+        Key::F3 => Some(id(2, 2)),
+        Key::F4 => Some(id(3, 2)),
+        Key::F5 => Some(id(5, 0)),  // 英汉
+        Key::F6 => Some(id(2, 0)),  // 计算
+        Key::F7 => Some(id(3, 0)),  // 时间
+        Key::F8 => Some(id(1, 0)),  // 游戏
+        Key::F9 => Some(id(6, 0)),  // 词库
+        Key::F10 => Some(id(7, 0)), // 学习
+        Key::F11 => Some(id(0, 0)), // 网络/电源
+
+        // Power button (Delete)
+        Key::Delete => Some(id(0, 0)),
+
+        // Letters
+        Key::A => Some(id(0, 5)),
+        Key::B => Some(id(4, 6)),
+        Key::C => Some(id(2, 6)),
+        Key::D => Some(id(2, 5)),
+        Key::E => Some(id(2, 4)),
+        Key::F => Some(id(3, 5)),
+        Key::G => Some(id(4, 5)),
+        Key::H => Some(id(5, 5)),
+        Key::I => Some(id(7, 4)),
+        Key::J => Some(id(6, 5)),
+        Key::K => Some(id(7, 5)),
+        Key::L => Some(id(1, 3)),
+        Key::M => Some(id(6, 6)),
+        Key::N => Some(id(5, 6)),
+        Key::O => Some(id(0, 3)),
+        Key::P => Some(id(4, 3)),
+        Key::Q => Some(id(0, 4)),
+        Key::R => Some(id(3, 4)),
+        Key::S => Some(id(1, 5)),
+        Key::T => Some(id(4, 4)),
+        Key::U => Some(id(6, 4)),
+        Key::V => Some(id(3, 6)),
+        Key::W => Some(id(1, 4)),
+        Key::X => Some(id(1, 6)),
+        Key::Y => Some(id(5, 4)),
+        Key::Z => Some(id(0, 6)),
+
+        // Numbers
+        Key::Key0 => Some(id(4, 7)),
+        Key::Key1 => Some(id(4, 6)),
+        Key::Key2 => Some(id(5, 6)),
+        Key::Key3 => Some(id(6, 6)),
+        Key::Key4 => Some(id(4, 5)),
+        Key::Key5 => Some(id(5, 5)),
+        Key::Key6 => Some(id(6, 5)),
+        Key::Key7 => Some(id(4, 4)),
+        Key::Key8 => Some(id(5, 4)),
+        Key::Key9 => Some(id(6, 4)),
 
         _ => None,
     }

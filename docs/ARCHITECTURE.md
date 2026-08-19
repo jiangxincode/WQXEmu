@@ -62,6 +62,7 @@ pub struct RomFiles {
 | `pc1000.rs` | 12MB ROM (`pc1000.rom` = obj1+obj2+obj3) + 512KB NOR | Complete, boots to menu, keyboard + NOR work |
 | `cc800.rs` | 16MB ROM (`obj.bin`) + 512KB NOR | Complete, boots to menu, keyboard + NOR work |
 | `nc2000.rs` | NOR + NAND (`*.nor` / `*.nand`) | Boots to clock screen, standby/wake works |
+| `nc3000.rs` | 1MB NOR + ~66MB NAND (`*.nor` / `*.nand`) | Boots to clock screen, standby/wake works |
 
 ### NC1020
 
@@ -136,6 +137,31 @@ pub struct RomFiles {
   official CC800 2.x firmware: cold boot draws the main menu and arrows
   change the selection.
 
+### NC3000
+
+- The NC3000 is the faster sibling of the NC2000 (10.24 MHz CPU) and
+  shares its NOR + NAND boot model. The NOR is 1MB (32 x 32KB banks) and
+  the NAND covers two planes (~66MB plus an optional 64-page first plane
+  dump that is left erased when absent).
+- Memory map: 0x2000-0x3FFF is always RAM (no RAMB); banks 0x00-0x1F
+  select NOR pages; banks 0x80+ are invalid (no extended RAM). Bank 0/1
+  with ROA set map the whole 0x4000-0xBFFF window onto internal RAM
+  pages (bank 0 -> ram00/02/04/06, bank 1 -> ram08/0A/0C/0E); bank 0
+  without ROA maps 0x4000-0x7FFF onto RAM 0x4000/0x6000.
+- 0xC000-0xDFFF is the BBS page (page 1 is RAM 0x6000-0x7FFF);
+  0xE000-0xFFFF is the fixed BIOS page (NOR bank 0 + 0x6000). The reset
+  vector of the official firmware is 0xFFF4.
+- IO follows the SPDC1016 model shared with the NC2000, with two
+  differences: the NAND data register is 0x39 (not 0x29) and the NAND
+  control bits in port 4 are CLE=bit5, ALE=bit4, CE=bit2. The keypad has
+  a port-6 extension at 0x1E.
+- NOR block erase is 4KB. NAND commands (read/program/erase/status/ID)
+  are shared with the NC2000.
+- Standby/wake: the firmware switches the clock off (CKS=7) to enter
+  standby; pressing the power key at matrix (0,0) triggers a warm reset.
+- Verified with the official NC3000 firmware: cold boot draws the clock
+  screen, then enters standby and wakes on the power key.
+
 ### NC2000
 
 - No large ROM dump; firmware lives on NOR + NAND. Banks 0x00-0x0F select
@@ -180,10 +206,11 @@ kept as a convenience for the NC1020 case. The frame loop calls
 
 ## Model selection
 
-- Standalone frontend: `--model nc1020|pc1000|nc2000`, or auto-detection
-  via `detect_model(&files)` (NAND present → NC2000; 24MB ROM → NC1020;
-  12MB ROM → PC1000; 16MB ROM with a volume-1 boot page at 8MB → CC800;
-  otherwise NC1020 default).
+- Standalone frontend: `--model nc1020|pc1000|cc800|nc2000|nc3000`, or
+  auto-detection via `detect_model(&files)` (NAND > 60MB or 1MB NOR →
+  NC3000; NAND present → NC2000; 24MB ROM → NC1020; 12MB ROM → PC1000;
+  16MB ROM with a volume-1 boot page at 8MB → CC800; otherwise NC1020
+  default).
 - libretro core: classifies the loaded file by extension
   (`.nand`/`.nand0`/`.fls`/`.nor`/other) and picks up sibling files with
   the same stem, then runs the same auto-detection.
