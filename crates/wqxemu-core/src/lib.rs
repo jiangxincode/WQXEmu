@@ -27,6 +27,7 @@ pub mod emulator;
 pub mod flash;
 pub mod input;
 pub mod io;
+pub mod keyboard;
 pub mod lcd;
 pub mod machine;
 pub mod machines;
@@ -37,6 +38,7 @@ pub mod timer;
 // Re-export main types for convenience
 pub use emulator::Emulator;
 pub use input::key_ids;
+pub use keyboard::{key_id_for, layout_for, KeyDef};
 pub use lcd::{LCD_HEIGHT, LCD_WIDTH};
 pub use machine::{Machine, MachineModel, RomFiles};
 pub use machines::detect_model;

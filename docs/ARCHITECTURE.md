@@ -215,6 +215,16 @@ kept as a convenience for the NC1020 case. The frame loop calls
   (`.nand`/`.nand0`/`.fls`/`.nor`/other) and picks up sibling files with
   the same stem, then runs the same auto-detection.
 
+## Keyboard layouts (`keyboard.rs`)
+
+The frontend shows an on-screen keypad below the LCD. `keyboard.rs` is
+the single source of truth for the model-specific key matrices: each
+`KeyDef` carries the matrix position (`row << 3 | col`), the key-face
+label and the PC key hint. The desktop frontend (`wqxemu`) renders the
+keypad from `layout_for(model)`, highlights pressed keys, and accepts
+mouse clicks; the PC keyboard mapping in `main.rs` updates the same
+highlight state.
+
 ## Adding a new model
 
 1. Add a variant to `MachineModel` in `machine.rs`.

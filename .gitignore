@@ -1,5 +1,6 @@
 tmp/
 roms/
+res/
 target/
 .claude/
 .codegraph/

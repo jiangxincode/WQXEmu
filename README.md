@@ -26,6 +26,9 @@ A Wenquxing electronic dictionary emulator written in Rust, using Low-Level Emul
 - **Multi-model architecture** — shared `Machine` trait with NC1020 / PC1000 / CC800 / NC2000 / NC3000 backends (PC1000 and CC800 boot to the main menu; NC2000/NC3000 boot to the clock screen with standby/wake)
 - **LCD display** — 160×80 pixel display with 4 grayscale levels and ghosting effects
 - **Keyboard input** — complete QWERTY keyboard matrix emulation
+- **Virtual keypad** — the desktop frontend draws a model-specific
+  on-screen keypad below the LCD; keys can be clicked with the mouse or
+  pressed on the PC keyboard, and pressed keys are highlighted
 - **Audio system** — SPDS104A DSP emulation with tone generation
 - **Timer system** — multiple timer sources with interrupt generation
 - **RetroArch integration** — libretro core for use with RetroArch frontend

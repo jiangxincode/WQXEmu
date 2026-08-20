@@ -10,7 +10,12 @@ use minifb::{Key, Window, WindowOptions};
 
 use std::path::PathBuf;
 
-use wqxemu_core::{detect_model, key_ids, Emulator, MachineModel, RomFiles, LCD_HEIGHT, LCD_WIDTH};
+use wqxemu_core::{
+    detect_model, key_ids, layout_for, Emulator, MachineModel, RomFiles, LCD_HEIGHT, LCD_WIDTH,
+};
+
+mod keypad;
+use keypad::{hit_test, render_keypad, KEYPAD_HEIGHT, KEYPAD_WIDTH};
 
 /// WQXEmu - Wenquxing Emulator
 #[derive(Parser)]
@@ -57,8 +62,85 @@ struct Args {
 fn map_key(model: MachineModel, key: Key) -> Option<u8> {
     match model {
         MachineModel::Pc1000 | MachineModel::Cc800 => map_key_pc1000(key),
+        MachineModel::Nc2000 => map_key_nc2000(key),
         MachineModel::Nc3000 => map_key_nc3000(key),
         _ => map_key_nc1020(key),
+    }
+}
+
+/// Map minifb key to NC2000 key ID (matrix position).
+///
+/// The NC2000 shares the NC2000-era QWERTY matrix with the NC3000 but
+/// keeps its hotkeys in matrix column 1 (英汉/名片/计算/行程/资料/时间/
+/// 网络) and the power key at (0,0).
+fn map_key_nc2000(key: Key) -> Option<u8> {
+    let id = |row: u8, col: u8| row << 3 | col;
+    map_qwerty_2000(key).or_else(|| match key {
+        Key::F5 => Some(id(3, 1)),                // 英汉
+        Key::F6 => Some(id(4, 1)),                // 名片
+        Key::F7 => Some(id(5, 1)),                // 计算
+        Key::F8 => Some(id(2, 1)),                // 行程
+        Key::F9 => Some(id(1, 1)),                // 资料
+        Key::F10 => Some(id(0, 1)),               // 时间
+        Key::F11 => Some(id(6, 1)),               // 网络
+        Key::F12 | Key::Delete => Some(id(0, 0)), // ON/OFF
+        _ => None,
+    })
+}
+
+/// QWERTY block shared by the NC2000/NC3000 keypads.
+fn map_qwerty_2000(key: Key) -> Option<u8> {
+    let id = |row: u8, col: u8| row << 3 | col;
+    match key {
+        Key::Up => Some(id(2, 3)),
+        Key::Down => Some(id(3, 3)),
+        Key::Left => Some(id(7, 7)),
+        Key::Right => Some(id(7, 3)),
+        Key::Enter => Some(id(5, 3)),
+        Key::Escape => Some(id(3, 7)),
+        Key::Space => Some(id(6, 7)),
+        Key::Backspace => Some(id(1, 2)), // F2 = 删除
+        Key::F1 => Some(id(0, 2)),
+        Key::F2 => Some(id(1, 2)),
+        Key::F3 => Some(id(2, 2)),
+        Key::F4 => Some(id(3, 2)),
+        Key::A => Some(id(0, 5)),
+        Key::B => Some(id(4, 6)),
+        Key::C => Some(id(2, 6)),
+        Key::D => Some(id(2, 5)),
+        Key::E => Some(id(2, 4)),
+        Key::F => Some(id(3, 5)),
+        Key::G => Some(id(4, 5)),
+        Key::H => Some(id(5, 5)),
+        Key::I => Some(id(7, 4)),
+        Key::J => Some(id(6, 5)),
+        Key::K => Some(id(7, 5)),
+        Key::L => Some(id(1, 3)),
+        Key::M => Some(id(6, 6)),
+        Key::N => Some(id(5, 6)),
+        Key::O => Some(id(0, 3)),
+        Key::P => Some(id(4, 3)),
+        Key::Q => Some(id(0, 4)),
+        Key::R => Some(id(3, 4)),
+        Key::S => Some(id(1, 5)),
+        Key::T => Some(id(4, 4)),
+        Key::U => Some(id(6, 4)),
+        Key::V => Some(id(3, 6)),
+        Key::W => Some(id(1, 4)),
+        Key::X => Some(id(1, 6)),
+        Key::Y => Some(id(5, 4)),
+        Key::Z => Some(id(0, 6)),
+        Key::Key0 => Some(id(4, 7)),
+        Key::Key1 => Some(id(4, 6)),
+        Key::Key2 => Some(id(5, 6)),
+        Key::Key3 => Some(id(6, 6)),
+        Key::Key4 => Some(id(4, 5)),
+        Key::Key5 => Some(id(5, 5)),
+        Key::Key6 => Some(id(6, 5)),
+        Key::Key7 => Some(id(4, 4)),
+        Key::Key8 => Some(id(5, 4)),
+        Key::Key9 => Some(id(6, 4)),
+        _ => None,
     }
 }
 
@@ -232,75 +314,19 @@ fn map_key_pc1000(key: Key) -> Option<u8> {
 /// 时间 (3,0), 英汉 (5,0), 词库 (6,0), 学习 (7,0).
 fn map_key_nc3000(key: Key) -> Option<u8> {
     let id = |row: u8, col: u8| row << 3 | col;
-    match key {
-        // Arrows / navigation
-        Key::Up => Some(id(2, 3)),
-        Key::Down => Some(id(3, 3)),
-        Key::Left => Some(id(7, 7)),
-        Key::Right => Some(id(7, 3)),
-        Key::Enter => Some(id(5, 3)),
-        Key::Escape => Some(id(3, 7)),
-        Key::Space => Some(id(6, 7)),
-        Key::Backspace => Some(id(1, 2)), // F2 = 删除
-
-        // Function keys
-        Key::F1 => Some(id(0, 2)),
-        Key::F2 => Some(id(1, 2)),
-        Key::F3 => Some(id(2, 2)),
-        Key::F4 => Some(id(3, 2)),
-        Key::F5 => Some(id(5, 0)),  // 英汉
-        Key::F6 => Some(id(2, 0)),  // 计算
-        Key::F7 => Some(id(3, 0)),  // 时间
-        Key::F8 => Some(id(1, 0)),  // 游戏
-        Key::F9 => Some(id(6, 0)),  // 词库
-        Key::F10 => Some(id(7, 0)), // 学习
-        Key::F11 => Some(id(0, 0)), // 网络/电源
-
-        // Power button (Delete)
-        Key::Delete => Some(id(0, 0)),
-
-        // Letters
-        Key::A => Some(id(0, 5)),
-        Key::B => Some(id(4, 6)),
-        Key::C => Some(id(2, 6)),
-        Key::D => Some(id(2, 5)),
-        Key::E => Some(id(2, 4)),
-        Key::F => Some(id(3, 5)),
-        Key::G => Some(id(4, 5)),
-        Key::H => Some(id(5, 5)),
-        Key::I => Some(id(7, 4)),
-        Key::J => Some(id(6, 5)),
-        Key::K => Some(id(7, 5)),
-        Key::L => Some(id(1, 3)),
-        Key::M => Some(id(6, 6)),
-        Key::N => Some(id(5, 6)),
-        Key::O => Some(id(0, 3)),
-        Key::P => Some(id(4, 3)),
-        Key::Q => Some(id(0, 4)),
-        Key::R => Some(id(3, 4)),
-        Key::S => Some(id(1, 5)),
-        Key::T => Some(id(4, 4)),
-        Key::U => Some(id(6, 4)),
-        Key::V => Some(id(3, 6)),
-        Key::W => Some(id(1, 4)),
-        Key::X => Some(id(1, 6)),
-        Key::Y => Some(id(5, 4)),
-        Key::Z => Some(id(0, 6)),
-
-        // Numbers
-        Key::Key0 => Some(id(4, 7)),
-        Key::Key1 => Some(id(4, 6)),
-        Key::Key2 => Some(id(5, 6)),
-        Key::Key3 => Some(id(6, 6)),
-        Key::Key4 => Some(id(4, 5)),
-        Key::Key5 => Some(id(5, 5)),
-        Key::Key6 => Some(id(6, 5)),
-        Key::Key7 => Some(id(4, 4)),
-        Key::Key8 => Some(id(5, 4)),
-        Key::Key9 => Some(id(6, 4)),
-
+    map_qwerty_2000(key).or_else(|| match key {
+        // Hotkey column 0 (from the NC3000 keymap):
+        // 网络/电源 (0,0), 游戏 (1,0), 计算 (2,0), 时间 (3,0),
+        // 英汉 (5,0), 词库 (6,0), 学习 (7,0).
+        Key::F5 => Some(id(1, 0)),                // 游戏
+        Key::F6 => Some(id(2, 0)),                // 计算
+        Key::F7 => Some(id(3, 0)),                // 时间
+        Key::F9 => Some(id(5, 0)),                // 英汉
+        Key::F10 => Some(id(6, 0)),               // 词库
+        Key::F11 => Some(id(7, 0)),               // 学习
+        Key::F12 | Key::Delete => Some(id(0, 0)), // 网络/电源
         _ => None,
-    }
+    })
 }
 
 fn main() -> Result<()> {
@@ -346,8 +372,15 @@ fn main() -> Result<()> {
 
     // Create window
     let scale = args.scale as usize;
-    let window_width = LCD_WIDTH * scale;
-    let window_height = LCD_HEIGHT * scale;
+    let lcd_width = LCD_WIDTH * scale;
+    let lcd_height = LCD_HEIGHT * scale;
+    // The keypad panel sits below the LCD; the window is widened when
+    // the LCD is narrower than the panel so the keys stay readable.
+    let window_width = lcd_width.max(KEYPAD_WIDTH);
+    let window_height = lcd_height + KEYPAD_HEIGHT;
+    let lcd_x = (window_width - lcd_width) / 2;
+    let panel_x = (window_width - KEYPAD_WIDTH) / 2;
+    let panel_y = lcd_height;
 
     let mut window = Window::new(
         &format!("WQXEmu - {}", model.name().to_uppercase()),
@@ -365,7 +398,9 @@ fn main() -> Result<()> {
     window.set_target_fps(30);
 
     // Main event loop
-    let mut last_key_state: std::collections::HashMap<u8, bool> = std::collections::HashMap::new();
+    let layout = layout_for(model);
+    let mut pressed = [false; 64];
+    let mut mouse_key: Option<u8> = None;
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
         // Process input
@@ -374,10 +409,9 @@ fn main() -> Result<()> {
             .iter()
             .for_each(|key| {
                 if let Some(key_id) = map_key(model, *key) {
-                    let was_pressed = last_key_state.get(&key_id).copied().unwrap_or(false);
-                    if !was_pressed {
+                    if !pressed[key_id as usize] {
                         emu.set_key(key_id, true);
-                        last_key_state.insert(key_id, true);
+                        pressed[key_id as usize] = true;
                     }
                 }
             });
@@ -385,9 +419,35 @@ fn main() -> Result<()> {
         window.get_keys_released().iter().for_each(|key| {
             if let Some(key_id) = map_key(model, *key) {
                 emu.set_key(key_id, false);
-                last_key_state.insert(key_id, false);
+                pressed[key_id as usize] = false;
             }
         });
+
+        // Mouse: click the virtual keypad.
+        let mouse_down = window.get_mouse_down(minifb::MouseButton::Left);
+        let mouse_pos = window.get_mouse_pos(minifb::MouseMode::Clamp);
+        let (mx, my) = mouse_pos.map_or((0, 0), |(x, y)| (x as usize, y as usize));
+        if mouse_down {
+            if let Some(key_id) = hit_test(mx, my, panel_x, panel_y, model, layout) {
+                if mouse_key != Some(key_id) {
+                    if let Some(old) = mouse_key {
+                        emu.set_key(old, false);
+                        pressed[old as usize] = false;
+                    }
+                    emu.set_key(key_id, true);
+                    pressed[key_id as usize] = true;
+                    mouse_key = Some(key_id);
+                }
+            } else if let Some(old) = mouse_key {
+                emu.set_key(old, false);
+                pressed[old as usize] = false;
+                mouse_key = None;
+            }
+        } else if let Some(old) = mouse_key {
+            emu.set_key(old, false);
+            pressed[old as usize] = false;
+            mouse_key = None;
+        }
 
         // Run one frame
         emu.run_frame();
@@ -395,16 +455,25 @@ fn main() -> Result<()> {
         // Get framebuffer and render
         let pixels = emu.framebuffer();
 
-        // Scale the framebuffer
+        // Scale the LCD framebuffer (centered) + draw the keypad below.
         let mut buffer = vec![0u32; window_width * window_height];
-        for y in 0..window_height {
-            for x in 0..window_width {
+        for y in 0..lcd_height {
+            for x in 0..lcd_width {
                 let src_x = x / scale;
                 let src_y = y / scale;
                 let pixel = pixels[src_y * LCD_WIDTH + src_x];
-                buffer[y * window_width + x] = pixel;
+                buffer[y * window_width + lcd_x + x] = pixel;
             }
         }
+        render_keypad(
+            &mut buffer,
+            window_width,
+            panel_x,
+            panel_y,
+            model,
+            layout,
+            &pressed,
+        );
 
         window
             .update_with_buffer(&buffer, window_width, window_height)
