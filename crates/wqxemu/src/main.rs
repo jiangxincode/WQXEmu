@@ -15,7 +15,7 @@ use wqxemu_core::{
 };
 
 mod keypad;
-use keypad::DeviceSkin;
+use keypad::{DeviceSkin, SkinInput};
 
 /// WQXEmu - Wenquxing Emulator
 #[derive(Parser)]
@@ -175,6 +175,11 @@ fn map_key_nc1020(key: Key) -> Option<u8> {
         Key::F2 => Some(key_ids::F2),
         Key::F3 => Some(key_ids::F3),
         Key::F4 => Some(key_ids::F4),
+        Key::F5 => Some(key_ids::F5),
+        Key::F6 => Some(key_ids::F6),
+        Key::F7 => Some(key_ids::F7),
+        Key::F8 => Some(key_ids::F8),
+        Key::F9 => Some(key_ids::F9),
         Key::F10 => Some(key_ids::F10),
         Key::F11 => Some(key_ids::F11),
 
@@ -186,44 +191,44 @@ fn map_key_nc1020(key: Key) -> Option<u8> {
         Key::Delete => Some(key_ids::POWER),
 
         // Letter keys
-        Key::A => Some(0x30),
-        Key::B => Some(0x31),
+        Key::A => Some(0x28),
+        Key::B => Some(0x34),
         Key::C => Some(0x32),
-        Key::D => Some(0x33),
-        Key::E => Some(0x14),
-        Key::F => Some(0x24),
-        Key::G => Some(0x15),
-        Key::H => Some(0x25),
-        Key::I => Some(0x16),
-        Key::J => Some(0x26),
-        Key::K => Some(0x36),
-        Key::L => Some(0x17),
-        Key::M => Some(0x27),
-        Key::N => Some(0x37),
-        Key::O => Some(0x38),
-        Key::P => Some(0x28),
-        Key::Q => Some(0x11),
-        Key::R => Some(0x12),
-        Key::S => Some(0x21),
-        Key::T => Some(0x22),
-        Key::U => Some(0x13),
-        Key::V => Some(0x23),
-        Key::W => Some(0x31),
-        Key::X => Some(0x32),
-        Key::Y => Some(0x33),
-        Key::Z => Some(0x34),
+        Key::D => Some(0x2A),
+        Key::E => Some(0x22),
+        Key::F => Some(0x2B),
+        Key::G => Some(0x2C),
+        Key::H => Some(0x2D),
+        Key::I => Some(0x27),
+        Key::J => Some(0x2E),
+        Key::K => Some(0x2F),
+        Key::L => Some(0x19),
+        Key::M => Some(0x36),
+        Key::N => Some(0x35),
+        Key::O => Some(0x18),
+        Key::P => Some(0x1C),
+        Key::Q => Some(0x20),
+        Key::R => Some(0x23),
+        Key::S => Some(0x29),
+        Key::T => Some(0x24),
+        Key::U => Some(0x26),
+        Key::V => Some(0x33),
+        Key::W => Some(0x21),
+        Key::X => Some(0x31),
+        Key::Y => Some(0x25),
+        Key::Z => Some(0x30),
 
         // Number keys
-        Key::Key0 => Some(0x20),
-        Key::Key1 => Some(0x10),
-        Key::Key2 => Some(0x11),
-        Key::Key3 => Some(0x12),
-        Key::Key4 => Some(0x13),
-        Key::Key5 => Some(0x14),
-        Key::Key6 => Some(0x15),
-        Key::Key7 => Some(0x16),
-        Key::Key8 => Some(0x17),
-        Key::Key9 => Some(0x18),
+        Key::Key0 => Some(0x3C),
+        Key::Key1 => Some(0x34),
+        Key::Key2 => Some(0x35),
+        Key::Key3 => Some(0x36),
+        Key::Key4 => Some(0x2C),
+        Key::Key5 => Some(0x2D),
+        Key::Key6 => Some(0x2E),
+        Key::Key7 => Some(0x24),
+        Key::Key8 => Some(0x25),
+        Key::Key9 => Some(0x26),
 
         _ => None,
     }
@@ -429,7 +434,7 @@ fn main() -> Result<()> {
     // Main event loop
     let layout = layout_for(model);
     let mut pressed = [false; 64];
-    let mut mouse_key: Option<u8> = None;
+    let mut mouse_input: Option<SkinInput> = None;
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
         // Process input
@@ -460,25 +465,31 @@ fn main() -> Result<()> {
                 window_to_skin_pos(mouse, window.get_size(), (window_width, window_height))
             });
         if mouse_down {
-            if let Some(key_id) = mouse_pos.and_then(|(x, y)| skin.hit_test(x, y, layout)) {
-                if mouse_key != Some(key_id) {
-                    if let Some(old) = mouse_key {
-                        emu.set_key(old, false);
-                        pressed[old as usize] = false;
-                    }
-                    emu.set_key(key_id, true);
-                    pressed[key_id as usize] = true;
-                    mouse_key = Some(key_id);
+            let next_input = mouse_pos.and_then(|(x, y)| skin.hit_test(x, y, layout));
+            if mouse_input != next_input {
+                if let Some(SkinInput::Key(old)) = mouse_input {
+                    emu.set_key(old, false);
+                    pressed[old as usize] = false;
                 }
-            } else if let Some(old) = mouse_key {
+                match next_input {
+                    Some(SkinInput::Key(key_id)) => {
+                        emu.set_key(key_id, true);
+                        pressed[key_id as usize] = true;
+                    }
+                    Some(SkinInput::Reset) => {
+                        emu.reset();
+                        pressed.fill(false);
+                    }
+                    None => {}
+                }
+                mouse_input = next_input;
+            }
+        } else {
+            if let Some(SkinInput::Key(old)) = mouse_input {
                 emu.set_key(old, false);
                 pressed[old as usize] = false;
-                mouse_key = None;
             }
-        } else if let Some(old) = mouse_key {
-            emu.set_key(old, false);
-            pressed[old as usize] = false;
-            mouse_key = None;
+            mouse_input = None;
         }
 
         // Run one frame
@@ -520,7 +531,9 @@ fn save_screenshot(pixels: &[u32], path: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::window_to_skin_pos;
+    use super::{map_key_nc1020, window_to_skin_pos};
+    use minifb::Key;
+    use wqxemu_core::key_ids;
 
     #[test]
     fn resized_window_coordinates_follow_the_letterboxed_skin() {
@@ -532,5 +545,15 @@ mod tests {
             window_to_skin_pos((100.0, 300.0), (800, 600), (400, 600)),
             None
         );
+    }
+
+    #[test]
+    fn nc1020_pc_keyboard_uses_reference_matrix_ids() {
+        assert_eq!(map_key_nc1020(Key::F5), Some(key_ids::F5));
+        assert_eq!(map_key_nc1020(Key::F9), Some(key_ids::F9));
+        assert_eq!(map_key_nc1020(Key::Q), Some(0x20));
+        assert_eq!(map_key_nc1020(Key::A), Some(0x28));
+        assert_eq!(map_key_nc1020(Key::Space), Some(0x3E));
+        assert_eq!(map_key_nc1020(Key::Key1), Some(0x34));
     }
 }

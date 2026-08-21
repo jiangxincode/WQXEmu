@@ -32,6 +32,16 @@ pub mod key_ids {
     pub const F3: u8 = 0x12;
     /// F4 key
     pub const F4: u8 = 0x13;
+    /// F5 dictionary hotkey
+    pub const F5: u8 = 0x0B;
+    /// F6 card hotkey
+    pub const F6: u8 = 0x0C;
+    /// F7 calculator hotkey
+    pub const F7: u8 = 0x0D;
+    /// F8 memo hotkey
+    pub const F8: u8 = 0x0A;
+    /// F9 data hotkey
+    pub const F9: u8 = 0x09;
     /// Up arrow
     pub const UP: u8 = 0x1A;
     /// Down arrow
@@ -45,9 +55,9 @@ pub mod key_ids {
     /// ESC
     pub const ESC: u8 = 0x3B;
     /// Space
-    pub const SPACE: u8 = 0x35;
+    pub const SPACE: u8 = 0x3E;
     /// Backspace
-    pub const BACKSPACE: u8 = 0x36;
+    pub const BACKSPACE: u8 = F2;
     /// Page Up
     pub const PAGE_UP: u8 = 0x37;
     /// Page Down

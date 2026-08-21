@@ -201,6 +201,11 @@ fn map_keyboard_key(keycode: u32) -> Option<u8> {
         283 => Some(key_ids::F2),  // F2
         284 => Some(key_ids::F3),  // F3
         285 => Some(key_ids::F4),  // F4
+        286 => Some(key_ids::F5),  // F5
+        287 => Some(key_ids::F6),  // F6
+        288 => Some(key_ids::F7),  // F7
+        289 => Some(key_ids::F8),  // F8
+        290 => Some(key_ids::F9),  // F9
         291 => Some(key_ids::F10), // F10
         292 => Some(key_ids::F11), // F11
         // Letters

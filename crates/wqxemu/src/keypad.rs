@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result};
 use image::imageops::FilterType;
-use wqxemu_core::{key_id_for, KeyDef, MachineModel, LCD_HEIGHT, LCD_WIDTH};
+use wqxemu_core::{key_id_for, key_ids, KeyDef, MachineModel, LCD_HEIGHT, LCD_WIDTH};
 
 const SOURCE_WIDTH: usize = 1086;
 const SOURCE_HEIGHT: usize = 1448;
@@ -36,6 +36,13 @@ struct SkinSpec {
     screen: Rect,
     lcd_background: u32,
     lcd_foreground: u32,
+}
+
+/// An input action exposed by a clickable part of the device skin.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SkinInput {
+    Key(u8),
+    Reset,
 }
 
 /// A model-specific device image with LCD and clickable key geometry.
@@ -122,19 +129,42 @@ impl DeviceSkin {
                 }
             }
         }
+        if self.model == MachineModel::Nc1020 {
+            if pressed[key_ids::F10 as usize] {
+                self.darken(&mut output, Rect::centered(105, 950, 82, 52));
+            }
+            if pressed[key_ids::F11 as usize] {
+                self.darken(&mut output, Rect::centered(203, 950, 82, 52));
+            }
+        }
         output
     }
 
-    /// Translate a window-buffer coordinate into the model's matrix key ID.
-    pub fn hit_test(&self, x: usize, y: usize, layout: &[KeyDef]) -> Option<u8> {
+    /// Translate a window-buffer coordinate into a device input action.
+    pub fn hit_test(&self, x: usize, y: usize, layout: &[KeyDef]) -> Option<SkinInput> {
+        if x >= self.width || y >= self.height {
+            return None;
+        }
         let source_x = x * SOURCE_WIDTH / self.width;
         let source_y = y * SOURCE_HEIGHT / self.height;
+
+        if self.model == MachineModel::Nc1020 {
+            if Rect::centered(295, 970, 48, 48).contains(source_x, source_y) {
+                return Some(SkinInput::Reset);
+            }
+            if Rect::centered(105, 950, 82, 52).contains(source_x, source_y) {
+                return Some(SkinInput::Key(key_ids::F10));
+            }
+            if Rect::centered(203, 950, 82, 52).contains(source_x, source_y) {
+                return Some(SkinInput::Key(key_ids::F11));
+            }
+        }
 
         let hit = layout.iter().find(|def| {
             key_region(self.model, def).is_some_and(|region| region.contains(source_x, source_y))
         });
         if let Some(def) = hit {
-            return Some(key_id_for(self.model, def.row, def.col));
+            return Some(SkinInput::Key(key_id_for(self.model, def.row, def.col)));
         }
 
         // NC3000 exposes the same matrix key as both ON/OFF and NETWORK.
@@ -144,7 +174,7 @@ impl DeviceSkin {
             return layout
                 .iter()
                 .find(|def| def.row == 0 && def.col == 0)
-                .map(|def| key_id_for(self.model, def.row, def.col));
+                .map(|def| SkinInput::Key(key_id_for(self.model, def.row, def.col)));
         }
         None
     }
@@ -320,7 +350,7 @@ fn cc800_special_region(def: &KeyDef) -> Option<Rect> {
 
 fn nc1020_special_region(def: &KeyDef) -> Option<Rect> {
     match (def.drow, def.dcol) {
-        (0, col @ 0..=1) => Some(Rect::centered(105 + col as usize * 98, 950, 82, 52)),
+        (0, col @ 0..=6) => Some(Rect::centered(392 + col as usize * 98, 953, 82, 52)),
         (1, col @ 2..=5) => Some(Rect::centered(
             973,
             [135, 216, 300, 383][col as usize - 2],
@@ -395,7 +425,7 @@ mod tests {
                 let y = (region.y + region.height / 2) * skin.height() / SOURCE_HEIGHT;
                 assert_eq!(
                     skin.hit_test(x, y, layout),
-                    Some(key_id_for(model, def.row, def.col)),
+                    Some(SkinInput::Key(key_id_for(model, def.row, def.col))),
                     "{} key {}",
                     model.name(),
                     def.label
@@ -415,5 +445,30 @@ mod tests {
             output[screen_y * skin.width() + screen_x],
             skin.spec.lcd_background
         );
+    }
+
+    #[test]
+    fn nc1020_auxiliary_buttons_have_actions() {
+        let skin = DeviceSkin::load(MachineModel::Nc1020, 4).unwrap();
+        let layout = layout_for(MachineModel::Nc1020);
+        let point = |source_x, source_y| {
+            (
+                source_x * skin.width() / SOURCE_WIDTH,
+                source_y * skin.height() / SOURCE_HEIGHT,
+            )
+        };
+
+        let (x, y) = point(105, 950);
+        assert_eq!(
+            skin.hit_test(x, y, layout),
+            Some(SkinInput::Key(key_ids::F10))
+        );
+        let (x, y) = point(203, 950);
+        assert_eq!(
+            skin.hit_test(x, y, layout),
+            Some(SkinInput::Key(key_ids::F11))
+        );
+        let (x, y) = point(295, 970);
+        assert_eq!(skin.hit_test(x, y, layout), Some(SkinInput::Reset));
     }
 }
