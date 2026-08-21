@@ -6,6 +6,7 @@
 // CPU through the generic `Machine` trait.
 
 use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
 
 use crate::audio::Audio;
 use crate::cpu::{Cpu, CpuBus, RESET_VECTOR};
@@ -19,6 +20,7 @@ use crate::save::SaveState;
 use crate::timer::Timer;
 
 /// NC1020 machine.
+#[derive(Serialize, Deserialize)]
 pub struct Nc1020Machine {
     memory: Memory,
     input: Input,
@@ -26,6 +28,7 @@ pub struct Nc1020Machine {
     audio: Audio,
     lcd: Lcd,
     flash: Flash,
+    #[serde(skip)]
     rom: Vec<u8>,
     nor: Vec<u8>,
 }
@@ -318,6 +321,22 @@ impl Machine for Nc1020Machine {
 
         // Rebuild memory mapping
         self.memory.update_bbs_pages(&self.rom, &self.nor);
+    }
+
+    fn save_persistent_state(&self) -> Result<Vec<u8>> {
+        bincode::serialize(self).context("Failed to serialize NC1020 persistent state")
+    }
+
+    fn load_persistent_state(&mut self, data: &[u8]) -> Result<()> {
+        let mut restored: Self =
+            bincode::deserialize(data).context("Failed to deserialize NC1020 persistent state")?;
+        restored.rom = std::mem::take(&mut self.rom);
+        *self = restored;
+        Ok(())
+    }
+
+    fn persistent_state_identity(&self) -> u64 {
+        crate::save::persistent_identity(&self.rom)
     }
 }
 

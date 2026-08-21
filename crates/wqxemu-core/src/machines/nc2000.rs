@@ -7,6 +7,8 @@
 // DSP, NAND controller).
 
 use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
+use serde_big_array::BigArray;
 
 use crate::audio::Audio;
 use crate::cpu::{Cpu, CpuBus};
@@ -93,7 +95,7 @@ mod interrupt_source {
 }
 
 /// NOR command state machine states.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 enum NorCmd {
     None,
     SwId,
@@ -106,15 +108,21 @@ enum NorCmd {
 }
 
 /// NC2000 machine.
+#[derive(Serialize, Deserialize)]
 pub struct Nc2000Machine {
+    #[serde(with = "BigArray")]
     io: [u8; 0x40],
+    #[serde(with = "BigArray")]
     ext_reg: [u8; 256],
     ram: Vec<u8>,
     ext_ram: Vec<u8>,
+    #[serde(with = "BigArray")]
     ram_b: [u8; 0x2000],
+    #[serde(with = "BigArray")]
     ram_b2: [u8; 0x2000],
     nor: Vec<u8>,
     nand: Vec<u8>,
+    #[serde(with = "BigArray")]
     nor_info_block: [u8; 0x100],
 
     // NOR state
@@ -1484,6 +1492,17 @@ impl Machine for Nc2000Machine {
         }
         self.lcd_buff_addr = state.lcd_addr as u16;
     }
+
+    fn save_persistent_state(&self) -> Result<Vec<u8>> {
+        bincode::serialize(self).context("Failed to serialize NC2000 persistent state")
+    }
+
+    fn load_persistent_state(&mut self, data: &[u8]) -> Result<()> {
+        let restored =
+            bincode::deserialize(data).context("Failed to deserialize NC2000 persistent state")?;
+        *self = restored;
+        Ok(())
+    }
 }
 
 /// Bus adapter connecting the shared CPU to NC2000 hardware.
@@ -1754,6 +1773,30 @@ mod tests {
         }
         m.io_write(io_reg::PORT4 as u8, 0x00);
         assert_eq!(m.bus_read(io_reg::NAND_DATA as u16), 0x22);
+    }
+
+    #[test]
+    fn persistent_state_preserves_flash_and_private_hardware_state() {
+        let mut source = empty_machine();
+        source.nor[0x1234] = 0x12;
+        source.nand[0x2345] = 0x23;
+        source.ram[0x3456] = 0x34;
+        source.ext_ram[0x4567] = 0x45;
+        source.ext_reg[0x56] = 0x56;
+        source.timer0ticks = 123;
+        source.pending_interrupts.push(0x67);
+
+        let data = source.save_persistent_state().unwrap();
+        let mut restored = empty_machine();
+        restored.load_persistent_state(&data).unwrap();
+
+        assert_eq!(restored.nor[0x1234], 0x12);
+        assert_eq!(restored.nand[0x2345], 0x23);
+        assert_eq!(restored.ram[0x3456], 0x34);
+        assert_eq!(restored.ext_ram[0x4567], 0x45);
+        assert_eq!(restored.ext_reg[0x56], 0x56);
+        assert_eq!(restored.timer0ticks, 123);
+        assert_eq!(restored.pending_interrupts, vec![0x67]);
     }
 
     #[test]

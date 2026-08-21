@@ -10,6 +10,7 @@ anyhow.workspace = true
 thiserror.workspace = true
 log.workspace = true
 serde.workspace = true
+serde-big-array.workspace = true
 bincode.workspace = true
 
 [dev-dependencies]

@@ -7,6 +7,7 @@
 // and the generic `Emulator` shell stay model-agnostic.
 
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 use crate::cpu::Cpu;
@@ -14,7 +15,7 @@ use crate::lcd::Lcd;
 use crate::save::SaveState;
 
 /// Supported hardware models.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MachineModel {
     /// NC1020 (SPDC1024 SoC, ROM + NOR Flash)
     Nc1020,
@@ -147,6 +148,17 @@ pub trait Machine: Send {
 
     /// Restore a save state.
     fn load_state(&mut self, cpu: &mut Cpu, state: &SaveState);
+
+    /// Serialize the complete model-specific state for persistent sessions.
+    fn save_persistent_state(&self) -> Result<Vec<u8>>;
+
+    /// Restore model-specific state from a persistent session.
+    fn load_persistent_state(&mut self, data: &[u8]) -> Result<()>;
+
+    /// Identify immutable firmware that is intentionally omitted from sessions.
+    fn persistent_state_identity(&self) -> u64 {
+        0
+    }
 }
 
 /// Shared hardware component types that machines embed.

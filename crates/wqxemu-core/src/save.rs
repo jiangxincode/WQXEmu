@@ -6,8 +6,33 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
+use crate::cpu::Cpu;
+use crate::machine::MachineModel;
+
 /// Save state version for compatibility checking
 const SAVE_STATE_VERSION: u32 = 1;
+
+/// Persistent session version for compatibility checking.
+pub(crate) const PERSISTENT_STATE_VERSION: u32 = 1;
+
+/// File payload used by the standalone frontend for cross-process sessions.
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct PersistentState {
+    pub version: u32,
+    pub model: MachineModel,
+    pub machine_identity: u64,
+    pub cpu: Cpu,
+    pub frame_count: u64,
+    pub speed_up: bool,
+    pub machine: Vec<u8>,
+}
+
+/// Stable fingerprint used to reject sessions from another firmware image.
+pub(crate) fn persistent_identity(data: &[u8]) -> u64 {
+    data.iter().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+        (hash ^ u64::from(*byte)).wrapping_mul(0x0000_0100_0000_01b3)
+    })
+}
 
 /// Complete emulator save state
 #[derive(Clone, Debug, Serialize, Deserialize)]

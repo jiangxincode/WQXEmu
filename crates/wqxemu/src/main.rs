@@ -4,11 +4,15 @@
 // window with keyboard input support. The target model is selected with
 // `--model` or auto-detected from the ROM files.
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
+use flate2::read::GzDecoder;
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use minifb::{Key, Window, WindowOptions};
 
-use std::path::PathBuf;
+use std::io::{BufReader, BufWriter, Read, Write};
+use std::path::{Path, PathBuf};
 
 use wqxemu_core::{
     detect_model, key_ids, layout_for, Emulator, MachineModel, RomFiles, LCD_HEIGHT, LCD_WIDTH,
@@ -36,6 +40,14 @@ struct Args {
     /// Path to the first NAND plane (NC2000, optional)
     #[arg(long, help = "Path to the first NAND plane file")]
     nand0_path: Option<String>,
+
+    /// Load this persistent session if it exists and atomically update it on exit
+    #[arg(
+        long,
+        value_name = "PATH",
+        help = "Load/save a persistent session without modifying ROM or Flash dump files"
+    )]
+    state_file: Option<PathBuf>,
 
     /// Hardware model: nc1020, pc1000, cc800, nc2000 or nc3000 (default: auto-detect)
     #[arg(long, help = "Hardware model (nc1020, pc1000, cc800, nc2000, nc3000)")]
@@ -370,6 +382,106 @@ fn window_to_skin_pos(
     ))
 }
 
+fn load_persistent_state_if_present(emu: &mut Emulator, path: Option<&Path>) -> Result<bool> {
+    if let Some(path) = path.filter(|path| path.exists()) {
+        let state = read_persistent_state_file(path)?;
+        emu.load_persistent_state(&state)
+            .with_context(|| format!("Failed to load persistent state: {}", path.display()))?;
+        log::info!("Persistent state loaded from {}", path.display());
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+fn save_persistent_state_if_requested(emu: &Emulator, path: Option<&Path>) -> Result<()> {
+    if let Some(path) = path {
+        let state = emu.save_persistent_state()?;
+        write_persistent_state_file(path, &state)?;
+        log::info!("Persistent state saved to {}", path.display());
+    }
+    Ok(())
+}
+
+fn read_persistent_state_file(path: &Path) -> Result<Vec<u8>> {
+    let file = std::fs::File::open(path)
+        .with_context(|| format!("Failed to open state file: {}", path.display()))?;
+    let mut decoder = GzDecoder::new(BufReader::new(file));
+    let mut state = Vec::new();
+    decoder
+        .read_to_end(&mut state)
+        .with_context(|| format!("Failed to decompress state file: {}", path.display()))?;
+    Ok(state)
+}
+
+fn write_persistent_state_file(path: &Path, state: &[u8]) -> Result<()> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let mut temporary = tempfile::NamedTempFile::new_in(parent).with_context(|| {
+        format!(
+            "Failed to create temporary state file for {}",
+            path.display()
+        )
+    })?;
+    {
+        let writer = BufWriter::new(temporary.as_file_mut());
+        let mut encoder = GzEncoder::new(writer, Compression::fast());
+        encoder
+            .write_all(state)
+            .context("Failed to compress persistent state")?;
+        let mut writer = encoder
+            .finish()
+            .context("Failed to finish persistent state compression")?;
+        writer.flush().context("Failed to flush persistent state")?;
+    }
+    temporary
+        .as_file()
+        .sync_all()
+        .context("Failed to sync persistent state")?;
+    temporary
+        .persist(path)
+        .map_err(|error| error.error)
+        .with_context(|| format!("Failed to replace state file: {}", path.display()))?;
+    Ok(())
+}
+
+fn normalized_output_path(path: &Path) -> Result<PathBuf> {
+    if path.exists() {
+        return std::fs::canonicalize(path)
+            .with_context(|| format!("Failed to resolve path: {}", path.display()));
+    }
+    let file_name = path
+        .file_name()
+        .context("State file path must include a file name")?;
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let parent = std::fs::canonicalize(parent)
+        .with_context(|| format!("Failed to resolve directory: {}", parent.display()))?;
+    Ok(parent.join(file_name))
+}
+
+fn validate_state_file_path(path: Option<&Path>, files: &RomFiles) -> Result<()> {
+    let Some(path) = path else {
+        return Ok(());
+    };
+    let state_path = normalized_output_path(path)?;
+    for source in [&files.rom, &files.nor, &files.nand, &files.nand0]
+        .into_iter()
+        .flatten()
+    {
+        if normalized_output_path(source)? == state_path {
+            anyhow::bail!(
+                "State file must not overwrite a ROM or Flash dump: {}",
+                path.display()
+            );
+        }
+    }
+    Ok(())
+}
+
 fn main() -> Result<()> {
     env_logger::init();
 
@@ -388,10 +500,12 @@ fn main() -> Result<()> {
         None => detect_model(&files),
     };
     log::info!("Selected model: {}", model.name());
+    validate_state_file_path(args.state_file.as_deref(), &files)?;
 
     // Create emulator
     let mut emu = Emulator::new(model, &files)?;
     emu.reset();
+    load_persistent_state_if_present(&mut emu, args.state_file.as_deref())?;
 
     log::info!("Emulator initialized, PC=0x{:04X}", emu.pc());
 
@@ -408,6 +522,7 @@ fn main() -> Result<()> {
         let pixels = emu.framebuffer();
         save_screenshot(&pixels, screenshot_path)?;
         log::info!("Screenshot saved to {}", screenshot_path);
+        save_persistent_state_if_requested(&emu, args.state_file.as_deref())?;
         return Ok(());
     }
 
@@ -505,6 +620,8 @@ fn main() -> Result<()> {
             .expect("Failed to update window");
     }
 
+    save_persistent_state_if_requested(&emu, args.state_file.as_deref())?;
+
     Ok(())
 }
 
@@ -531,9 +648,44 @@ fn save_screenshot(pixels: &[u32], path: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{map_key_nc1020, window_to_skin_pos};
+    use super::{
+        map_key_nc1020, read_persistent_state_file, validate_state_file_path, window_to_skin_pos,
+        write_persistent_state_file, Args,
+    };
+    use clap::Parser;
     use minifb::Key;
-    use wqxemu_core::key_ids;
+    use std::path::{Path, PathBuf};
+    use wqxemu_core::{key_ids, RomFiles};
+
+    #[test]
+    fn persistent_state_file_is_opt_in_and_accepts_any_path() {
+        let default_args = Args::try_parse_from(["wqxemu"]).unwrap();
+        assert!(default_args.state_file.is_none());
+
+        let enabled_args = Args::try_parse_from(["wqxemu", "--state-file", "device.wqxs"]).unwrap();
+        assert_eq!(enabled_args.state_file, Some(PathBuf::from("device.wqxs")));
+    }
+
+    #[test]
+    fn persistent_state_file_must_not_alias_a_source_dump() {
+        let files = RomFiles::new(None, Some(PathBuf::from("device.nor")), None, None);
+        assert!(validate_state_file_path(Some(Path::new("device.wqxs")), &files).is_ok());
+        assert!(validate_state_file_path(Some(Path::new("device.nor")), &files).is_err());
+    }
+
+    #[test]
+    fn persistent_state_file_is_compressed_and_atomically_replaced() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("device.wqxs");
+
+        write_persistent_state_file(&path, b"first state").unwrap();
+        write_persistent_state_file(&path, b"replacement state").unwrap();
+
+        assert_eq!(
+            read_persistent_state_file(&path).unwrap(),
+            b"replacement state"
+        );
+    }
 
     #[test]
     fn resized_window_coordinates_follow_the_letterboxed_skin() {

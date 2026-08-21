@@ -10,6 +10,8 @@
 // use different positions than the NC2000.
 
 use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
+use serde_big_array::BigArray;
 
 use crate::audio::Audio;
 use crate::cpu::{Cpu, CpuBus};
@@ -89,7 +91,7 @@ mod ext_reg {
 }
 
 /// NOR command state machine states.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 enum NorCmd {
     None,
     SwId,
@@ -102,12 +104,16 @@ enum NorCmd {
 }
 
 /// NC3000 machine.
+#[derive(Serialize, Deserialize)]
 pub struct Nc3000Machine {
+    #[serde(with = "BigArray")]
     io: [u8; 0x40],
+    #[serde(with = "BigArray")]
     ext_reg: [u8; 256],
     ram: Vec<u8>,
     nor: Vec<u8>,
     nand: Vec<u8>,
+    #[serde(with = "BigArray")]
     nor_info_block: [u8; 0x100],
 
     // NOR state
@@ -1448,6 +1454,17 @@ impl Machine for Nc3000Machine {
             self.ram[..INTERNAL_RAM_SIZE].copy_from_slice(&state.ram[..INTERNAL_RAM_SIZE]);
         }
         self.lcd_buff_addr = state.lcd_addr as u16;
+    }
+
+    fn save_persistent_state(&self) -> Result<Vec<u8>> {
+        bincode::serialize(self).context("Failed to serialize NC3000 persistent state")
+    }
+
+    fn load_persistent_state(&mut self, data: &[u8]) -> Result<()> {
+        let restored =
+            bincode::deserialize(data).context("Failed to deserialize NC3000 persistent state")?;
+        *self = restored;
+        Ok(())
     }
 }
 
