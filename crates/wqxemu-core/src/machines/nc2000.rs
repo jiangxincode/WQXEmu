@@ -85,7 +85,7 @@ mod ext_reg {
     pub const P0_PU: usize = 0x24;
 }
 
-mod interrupt_vector {
+mod interrupt_source {
     pub const TWO_HZ: u8 = 0x00;
     pub const SAMPLE: u8 = 0x01;
     pub const ALARM: u8 = 0x02;
@@ -169,9 +169,9 @@ pub struct Nc2000Machine {
 
     // RTC / UART interrupt vectors
     rtc_256_counter: u8,
-    iv_queue: Vec<u8>,
+    pending_interrupts: Vec<u8>,
     uart_bank: u8,
-    uart_ivr: u8,
+    uart_vector_control: u8,
     uart_fcr: u8,
     uart_ier: u8,
     tb_cycles: u64,
@@ -234,9 +234,9 @@ impl Nc2000Machine {
             lcd_buff_addr: 0,
             lcd_buff_addr_mask: 0x3FFF,
             rtc_256_counter: 0,
-            iv_queue: Vec::new(),
+            pending_interrupts: Vec::new(),
             uart_bank: 0,
-            uart_ivr: 0,
+            uart_vector_control: 0,
             uart_fcr: 0,
             uart_ier: 0,
             tb_cycles: 0,
@@ -786,7 +786,8 @@ impl Nc2000Machine {
             io_reg::RTC_3C => 0,
             io_reg::RTC_3D => match self.uart_bank {
                 0 => {
-                    (self.peek_iv().unwrap_or(interrupt_vector::NONE) << 3) | (self.uart_ivr & 0x04)
+                    (self.pending_interrupt().unwrap_or(interrupt_source::NONE) << 3)
+                        | (self.uart_vector_control & 0x04)
                 }
                 1 => self.uart_fcr | 0x01,
                 2 => self.uart_ier | 0x02,
@@ -945,10 +946,10 @@ impl Nc2000Machine {
                 if idx == ext_reg::RTC_CTRL {
                     self.ext_reg[idx] = value;
                 } else if idx == ext_reg::INT_CLEAR {
-                    self.iv_queue.retain(|&iv| match iv {
-                        interrupt_vector::TWO_HZ => value & 0x01 == 0,
-                        interrupt_vector::ALARM => value & 0x02 == 0,
-                        interrupt_vector::SAMPLE => value & 0x04 == 0,
+                    self.pending_interrupts.retain(|&source| match source {
+                        interrupt_source::TWO_HZ => value & 0x01 == 0,
+                        interrupt_source::ALARM => value & 0x02 == 0,
+                        interrupt_source::SAMPLE => value & 0x04 == 0,
                         _ => true,
                     });
                     self.ext_reg[idx] = value & 0xF8;
@@ -970,7 +971,7 @@ impl Nc2000Machine {
         if addr as usize == io_reg::RTC_3D {
             let register_value = value & 0xFC;
             match self.uart_bank {
-                0 => self.uart_ivr = register_value & 0x04,
+                0 => self.uart_vector_control = register_value & 0x04,
                 1 => self.uart_fcr = register_value & 0xC8,
                 2 => self.uart_ier = register_value,
                 _ => {}
@@ -1256,15 +1257,15 @@ impl Nc2000Machine {
         alm
     }
 
-    fn put_iv(&mut self, iv: u8) {
-        if !self.iv_queue.contains(&iv) {
-            self.iv_queue.push(iv);
-            self.iv_queue.sort_unstable();
+    fn queue_interrupt(&mut self, source: u8) {
+        if !self.pending_interrupts.contains(&source) {
+            self.pending_interrupts.push(source);
+            self.pending_interrupts.sort_unstable();
         }
     }
 
-    fn peek_iv(&self) -> Option<u8> {
-        self.iv_queue.first().copied()
+    fn pending_interrupt(&self) -> Option<u8> {
+        self.pending_interrupts.first().copied()
     }
 
     /// Advance periodic events based on elapsed cycles since last tick.
@@ -1307,17 +1308,16 @@ impl Nc2000Machine {
             }
             if cnt.is_multiple_of(128) {
                 if cnt == 0 && self.ext_reg[ext_reg::RTC_CTRL] & 0x02 != 0 && self.chk_alarm() {
-                    self.put_iv(interrupt_vector::ALARM);
+                    self.queue_interrupt(interrupt_source::ALARM);
                 }
                 if self.ext_reg[ext_reg::RTC_CTRL] & 0x01 != 0 {
-                    self.put_iv(interrupt_vector::TWO_HZ);
+                    self.queue_interrupt(interrupt_source::TWO_HZ);
                 }
             }
             if cnt % 128 == 64 && self.nmi_enable() {
                 cpu.nmi_pending = true;
             }
-            if let Some(iv) = self.peek_iv() {
-                let _ = iv;
+            if self.pending_interrupt().is_some() {
                 cpu.irq_pending = true;
             }
         }
@@ -1352,9 +1352,9 @@ impl Nc2000Machine {
         self.lcd_buff_addr = 0;
         self.lcd_buff_addr_mask = 0x3FFF;
         self.rtc_256_counter = 0;
-        self.iv_queue.clear();
+        self.pending_interrupts.clear();
         self.uart_bank = 0;
-        self.uart_ivr = 0;
+        self.uart_vector_control = 0;
         self.uart_fcr = 0;
         self.uart_ier = 0;
         self.do_warm_reset = false;
@@ -1705,7 +1705,7 @@ mod tests {
     #[test]
     fn rtc_interrupt_vector_is_banked_and_cleared() {
         let mut m = empty_machine();
-        m.put_iv(interrupt_vector::ALARM);
+        m.queue_interrupt(interrupt_source::ALARM);
 
         // Bank 0 exposes the pending alarm vector in bits 3..7.
         assert_eq!(m.io_read(io_reg::RTC_3D as u8), 0x10);
@@ -1719,13 +1719,13 @@ mod tests {
         assert_eq!(m.io_read(io_reg::RTC_3D as u8), 0x14);
 
         // Lower vector numbers have priority and RCR1 clears them by bit.
-        m.put_iv(interrupt_vector::TWO_HZ);
+        m.queue_interrupt(interrupt_source::TWO_HZ);
         assert_eq!(m.io_read(io_reg::RTC_3D as u8), 0x04);
         m.io_write(io_reg::RTC_IDX as u8, ext_reg::INT_CLEAR as u8);
         m.io_write(io_reg::RTC_DATA as u8, 0x01);
         assert_eq!(m.io_read(io_reg::RTC_3D as u8), 0x14);
         m.io_write(io_reg::RTC_DATA as u8, 0x02);
-        assert!(m.iv_queue.is_empty());
+        assert!(m.pending_interrupts.is_empty());
         assert_eq!(m.io_read(io_reg::RTC_3D as u8), 0xFC);
     }
 
