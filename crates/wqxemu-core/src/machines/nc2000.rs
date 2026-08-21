@@ -85,6 +85,13 @@ mod ext_reg {
     pub const P0_PU: usize = 0x24;
 }
 
+mod interrupt_vector {
+    pub const TWO_HZ: u8 = 0x00;
+    pub const SAMPLE: u8 = 0x01;
+    pub const ALARM: u8 = 0x02;
+    pub const NONE: u8 = 0x1F;
+}
+
 /// NOR command state machine states.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum NorCmd {
@@ -160,9 +167,13 @@ pub struct Nc2000Machine {
     lcd_buff_addr: u16,
     lcd_buff_addr_mask: u16,
 
-    // RTC / interrupt vectors
+    // RTC / UART interrupt vectors
     rtc_256_counter: u8,
     iv_queue: Vec<u8>,
+    uart_bank: u8,
+    uart_ivr: u8,
+    uart_fcr: u8,
+    uart_ier: u8,
     tb_cycles: u64,
     rtc_cycles: u64,
     do_warm_reset: bool,
@@ -224,6 +235,10 @@ impl Nc2000Machine {
             lcd_buff_addr_mask: 0x3FFF,
             rtc_256_counter: 0,
             iv_queue: Vec::new(),
+            uart_bank: 0,
+            uart_ivr: 0,
+            uart_fcr: 0,
+            uart_ier: 0,
             tb_cycles: 0,
             rtc_cycles: 0,
             do_warm_reset: false,
@@ -769,7 +784,14 @@ impl Nc2000Machine {
                 }
             }
             io_reg::RTC_3C => 0,
-            io_reg::RTC_3D => self.io[addr as usize],
+            io_reg::RTC_3D => match self.uart_bank {
+                0 => {
+                    (self.peek_iv().unwrap_or(interrupt_vector::NONE) << 3) | (self.uart_ivr & 0x04)
+                }
+                1 => self.uart_fcr | 0x01,
+                2 => self.uart_ier | 0x02,
+                _ => 0x03,
+            },
             _ => 0,
         }
     }
@@ -923,11 +945,11 @@ impl Nc2000Machine {
                 if idx == ext_reg::RTC_CTRL {
                     self.ext_reg[idx] = value;
                 } else if idx == ext_reg::INT_CLEAR {
-                    self.iv_queue.retain(|&iv| {
-                        (value & 0x01) == 0
-                            || iv != 0x00 && (value & 0x02) == 0
-                            || iv != 0x02 && (value & 0x04) == 0
-                            || iv != 0x01
+                    self.iv_queue.retain(|&iv| match iv {
+                        interrupt_vector::TWO_HZ => value & 0x01 == 0,
+                        interrupt_vector::ALARM => value & 0x02 == 0,
+                        interrupt_vector::SAMPLE => value & 0x04 == 0,
+                        _ => true,
                     });
                     self.ext_reg[idx] = value & 0xF8;
                 } else if idx < 7 {
@@ -945,6 +967,16 @@ impl Nc2000Machine {
     }
 
     fn write_rtc_3x(&mut self, addr: u8, value: u8) {
+        if addr as usize == io_reg::RTC_3D {
+            let register_value = value & 0xFC;
+            match self.uart_bank {
+                0 => self.uart_ivr = register_value & 0x04,
+                1 => self.uart_fcr = register_value & 0xC8,
+                2 => self.uart_ier = register_value,
+                _ => {}
+            }
+            self.uart_bank = value & 0x03;
+        }
         self.io[addr as usize] = value;
     }
 
@@ -1227,6 +1259,7 @@ impl Nc2000Machine {
     fn put_iv(&mut self, iv: u8) {
         if !self.iv_queue.contains(&iv) {
             self.iv_queue.push(iv);
+            self.iv_queue.sort_unstable();
         }
     }
 
@@ -1274,10 +1307,10 @@ impl Nc2000Machine {
             }
             if cnt.is_multiple_of(128) {
                 if cnt == 0 && self.ext_reg[ext_reg::RTC_CTRL] & 0x02 != 0 && self.chk_alarm() {
-                    self.put_iv(0x02);
+                    self.put_iv(interrupt_vector::ALARM);
                 }
                 if self.ext_reg[ext_reg::RTC_CTRL] & 0x01 != 0 {
-                    self.put_iv(0x00);
+                    self.put_iv(interrupt_vector::TWO_HZ);
                 }
             }
             if cnt % 128 == 64 && self.nmi_enable() {
@@ -1320,6 +1353,10 @@ impl Nc2000Machine {
         self.lcd_buff_addr_mask = 0x3FFF;
         self.rtc_256_counter = 0;
         self.iv_queue.clear();
+        self.uart_bank = 0;
+        self.uart_ivr = 0;
+        self.uart_fcr = 0;
+        self.uart_ier = 0;
         self.do_warm_reset = false;
         self.audio.reset();
         self.cycles = 0;
@@ -1488,6 +1525,23 @@ mod tests {
         }
     }
 
+    fn run_frame(machine: &mut Nc2000Machine, cpu: &mut Cpu) {
+        let mut cycles = 0;
+        while cycles < crate::lcd::CYCLES_PER_FRAME {
+            cycles += machine.step(cpu);
+        }
+        machine.end_of_frame(cpu);
+    }
+
+    fn framebuffer_nonzero(machine: &Nc2000Machine) -> usize {
+        machine
+            .lcd
+            .framebuffer_raw()
+            .iter()
+            .filter(|&&byte| byte != 0)
+            .count()
+    }
+
     #[test]
     fn nor_software_id() {
         let mut m = empty_machine();
@@ -1649,6 +1703,33 @@ mod tests {
     }
 
     #[test]
+    fn rtc_interrupt_vector_is_banked_and_cleared() {
+        let mut m = empty_machine();
+        m.put_iv(interrupt_vector::ALARM);
+
+        // Bank 0 exposes the pending alarm vector in bits 3..7.
+        assert_eq!(m.io_read(io_reg::RTC_3D as u8), 0x10);
+
+        // Each write targets the current bank and selects the next bank.
+        m.io_write(io_reg::RTC_3D as u8, 0x05);
+        assert_eq!(m.io_read(io_reg::RTC_3D as u8), 0x01);
+        m.io_write(io_reg::RTC_3D as u8, 0xCA);
+        assert_eq!(m.io_read(io_reg::RTC_3D as u8), 0x02);
+        m.io_write(io_reg::RTC_3D as u8, 0xFC);
+        assert_eq!(m.io_read(io_reg::RTC_3D as u8), 0x14);
+
+        // Lower vector numbers have priority and RCR1 clears them by bit.
+        m.put_iv(interrupt_vector::TWO_HZ);
+        assert_eq!(m.io_read(io_reg::RTC_3D as u8), 0x04);
+        m.io_write(io_reg::RTC_IDX as u8, ext_reg::INT_CLEAR as u8);
+        m.io_write(io_reg::RTC_DATA as u8, 0x01);
+        assert_eq!(m.io_read(io_reg::RTC_3D as u8), 0x14);
+        m.io_write(io_reg::RTC_DATA as u8, 0x02);
+        assert!(m.iv_queue.is_empty());
+        assert_eq!(m.io_read(io_reg::RTC_3D as u8), 0xFC);
+    }
+
+    #[test]
     fn nand_images_share_physical_page_space() {
         let mut m = empty_machine();
         m.load_main_nand(&[0x22]);
@@ -1757,7 +1838,7 @@ mod tests {
     }
 
     #[test]
-    fn standby_and_wake() {
+    fn power_button_standby_and_wake() {
         let Some(files) = nc2000_rom_files() else {
             eprintln!("skipping: NC2000 dumps not present");
             return;
@@ -1767,72 +1848,57 @@ mod tests {
         let mut cpu = Cpu::new();
         cpu.reset(machine.peek_u16(crate::cpu::RESET_VECTOR));
 
-        // Run until the firmware enters standby (clock off).
-        let mut frames = 0;
-        while !machine.is_clk_off() && frames < MAX_BOOT_FRAMES {
-            let target = crate::lcd::CYCLES_PER_FRAME;
-            let mut acc = 0u64;
-            while acc < target {
-                acc += machine.step(&mut cpu);
-            }
-            machine.end_of_frame(&mut cpu);
-            frames += 1;
+        // Complete first-boot recovery and reach the main menu.
+        for _ in 0..MAX_BOOT_FRAMES {
+            run_frame(&mut machine, &mut cpu);
         }
-        assert!(machine.is_clk_off(), "firmware did not enter standby");
-        println!("entered standby after {} frames", frames);
+        assert!(
+            !machine.is_clk_off(),
+            "firmware powered off during recovery"
+        );
+        assert!(framebuffer_nonzero(&machine) > 50);
 
-        // Press a wake key (column 0) and step: warm reset should fire.
+        // ON/OFF puts the running firmware into standby.
         machine.set_key(0, true);
-        assert!(machine.do_warm_reset);
-        let pc_before = cpu.pc;
-        let _ = machine.step(&mut cpu);
-        assert!(!machine.is_clk_off(), "clock should be restored");
-        assert!(!machine.do_warm_reset);
-        // After warm reset the CPU restarts at the reset vector; the same
-        // step may already have executed the first instruction.
-        assert_ne!(pc_before, cpu.pc);
-        assert_ne!(cpu.pc, 0xE314, "CPU should leave the standby loop");
-
-        // Continue running: CPU should execute again after wake.
-        let target = crate::lcd::CYCLES_PER_FRAME;
-        let mut acc = 0u64;
-        while acc < target {
-            acc += machine.step(&mut cpu);
+        run_frame(&mut machine, &mut cpu);
+        machine.set_key(0, false);
+        for _ in 0..10 {
+            if machine.is_clk_off() {
+                break;
+            }
+            run_frame(&mut machine, &mut cpu);
         }
-        assert!(cpu.pc != 0);
+        assert!(machine.is_clk_off(), "power key did not enter standby");
+
+        // A second ON/OFF press wakes the device and restores the menu.
+        machine.set_key(0, true);
+        machine.set_key(0, false);
+        let mut max_nonzero = 0;
+        for _ in 0..200 {
+            run_frame(&mut machine, &mut cpu);
+            max_nonzero = max_nonzero.max(framebuffer_nonzero(&machine));
+        }
+        assert!(
+            !machine.is_clk_off(),
+            "device returned to standby after wake"
+        );
+        assert!(max_nonzero > 50, "wake did not restore visible content");
     }
 
     #[test]
     fn hotkey_wakes_device() {
-        let Some(files) = nc2000_rom_files() else {
-            eprintln!("skipping: NC2000 dumps not present");
-            return;
-        };
-        let mut machine = Nc2000Machine::new(&files).unwrap();
-        machine.reset();
+        let mut machine = empty_machine();
+        machine.io[io_reg::CLOCK_CTRL] = 0xE0;
         let mut cpu = Cpu::new();
-        cpu.reset(machine.peek_u16(crate::cpu::RESET_VECTOR));
-
-        // Run until standby
-        let mut frames = 0;
-        while !machine.is_clk_off() && frames < MAX_BOOT_FRAMES {
-            let mut acc = 0u64;
-            while acc < crate::lcd::CYCLES_PER_FRAME {
-                acc += machine.step(&mut cpu);
-            }
-            machine.end_of_frame(&mut cpu);
-            frames += 1;
-        }
-        assert!(machine.is_clk_off());
+        cpu.pc = 0x1234;
 
         // F5 (English-Chinese) sits at matrix (row 3, col 1).
         machine.set_key(3 << 3 | 1, true);
         assert!(machine.do_warm_reset);
-        let pc_before = cpu.pc;
-        let _ = machine.step(&mut cpu);
+        machine.warm_reset(&mut cpu);
         assert!(!machine.is_clk_off(), "clock should be restored");
         assert!(!machine.do_warm_reset);
-        assert_ne!(pc_before, cpu.pc);
+        assert_eq!(cpu.pc, 0xFFFF);
     }
 
     #[test]
