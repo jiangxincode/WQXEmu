@@ -167,23 +167,27 @@ pub struct RomFiles {
 - No large ROM dump; firmware lives on NOR + NAND. Banks 0x00-0x0F select
   NOR pages (16 x 32KB), banks 0x80+ select extended RAM, and the fixed
   BIOS page at 0xE000-0xFFFF is NOR bank 0.
-- NAND controller: 528-byte pages (512 main + 16 spare), command sequence
-  via IO 0x18 (CLE/ALE/CE) and data via IO 0x29. Supports read
+- NAND controller: 528-byte pages (512 main + 16 spare). Physical pages 0-63
+  come from the `nand0` first-plane dump, followed by the main `nand` dump.
+  Command sequencing uses IO 0x18 (CLE/ALE/CE) and data IO 0x29. Supports read
   (0x00/0x01/0x50), program (0x80/0x10), erase (0x60/0xD0), status (0x70)
   and ID (0x90).
 - NOR controller: SPR4096 command sequences (software ID, byte program,
   block/mass erase, info block).
 - IO: SPDC1016 register model — timers (0x04-0x07, 0x0C, 0x10-0x14),
   keypad ports (0x08/0x09/0x18), LCD address (0x06/0x0B/0x0C), RTC
-  (0x3A-0x3F), DSP (0x30-0x33), battery (0x1C).
+  (0x3E/0x3F), banked UART/interrupt-vector registers (0x3A-0x3D), DSP
+  (0x30-0x33), battery (0x1C). RTC interrupt acknowledge bits clear their
+  matching pending vectors.
 - Keypad: 8x8 matrix with port conduction emulation driven by port
   direction registers.
 - Standby/wake: firmware switches the clock off (io[0x05] CKS=7) to enter
   standby; the CPU is suspended and a key press on matrix columns 0/1
   triggers a warm reset that restores the clock and restarts the CPU.
-- UART / infrared and the NC2000-specific NAND file system are not
-  emulated yet; verified with the official NC2000 3.5 dump: the firmware
-  boots, draws the clock screen, enters standby and wakes on key press.
+- UART data transfer / infrared and the NC2000-specific NAND file system are
+  not emulated yet; verified with the official NC2000 3.5 dump: the firmware
+  completes first-boot recovery, reaches the menu, enters standby and wakes
+  on key press.
 
 ## `Emulator` shell (`emulator.rs`)
 

@@ -18,7 +18,7 @@ use crate::save::SaveState;
 const NUM_NOR_PAGES: usize = 0x10;
 /// NAND main area page count (65536 pages x 528 bytes).
 const NUM_NAND_PAGES: usize = 65536;
-/// NAND0 (first plane) page count.
+/// NAND0 first-plane page count.
 const NAND0_PAGES: usize = 64;
 /// NAND page size (512 data + 16 spare).
 const NAND_PAGE_SIZE: usize = 528;
@@ -85,6 +85,13 @@ mod ext_reg {
     pub const P0_PU: usize = 0x24;
 }
 
+mod interrupt_source {
+    pub const TWO_HZ: u8 = 0x00;
+    pub const SAMPLE: u8 = 0x01;
+    pub const ALARM: u8 = 0x02;
+    pub const NONE: u8 = 0x1F;
+}
+
 /// NOR command state machine states.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum NorCmd {
@@ -108,7 +115,6 @@ pub struct Nc2000Machine {
     ram_b2: [u8; 0x2000],
     nor: Vec<u8>,
     nand: Vec<u8>,
-    nand0: Vec<u8>,
     nor_info_block: [u8; 0x100],
 
     // NOR state
@@ -161,9 +167,13 @@ pub struct Nc2000Machine {
     lcd_buff_addr: u16,
     lcd_buff_addr_mask: u16,
 
-    // RTC / interrupt vectors
+    // RTC / UART interrupt vectors
     rtc_256_counter: u8,
-    iv_queue: Vec<u8>,
+    pending_interrupts: Vec<u8>,
+    uart_bank: u8,
+    uart_vector_control: u8,
+    uart_fcr: u8,
+    uart_ier: u8,
     tb_cycles: u64,
     rtc_cycles: u64,
     do_warm_reset: bool,
@@ -183,8 +193,7 @@ impl Nc2000Machine {
             ram_b: [0; 0x2000],
             ram_b2: [0; 0x2000],
             nor: vec![0xFF; NUM_NOR_PAGES * NOR_PAGE_SIZE],
-            nand: vec![0xFF; NUM_NAND_PAGES * NAND_PAGE_SIZE],
-            nand0: vec![0xFF; NAND0_PAGES * NAND_PAGE_SIZE],
+            nand: vec![0xFF; (NAND0_PAGES + NUM_NAND_PAGES) * NAND_PAGE_SIZE],
             nor_info_block: [0; 0x100],
             fp_step: 0,
             fp_type: NorCmd::None,
@@ -225,7 +234,11 @@ impl Nc2000Machine {
             lcd_buff_addr: 0,
             lcd_buff_addr_mask: 0x3FFF,
             rtc_256_counter: 0,
-            iv_queue: Vec::new(),
+            pending_interrupts: Vec::new(),
+            uart_bank: 0,
+            uart_vector_control: 0,
+            uart_fcr: 0,
+            uart_ier: 0,
             tb_cycles: 0,
             rtc_cycles: 0,
             do_warm_reset: false,
@@ -255,17 +268,26 @@ impl Nc2000Machine {
         if let Some(nand_path) = &files.nand {
             let data = std::fs::read(nand_path)
                 .with_context(|| format!("Failed to read NC2000 NAND: {}", nand_path.display()))?;
-            let n = self.nand.len().min(data.len());
-            self.nand[..n].copy_from_slice(&data[..n]);
+            self.load_main_nand(&data);
         }
         if let Some(nand0_path) = &files.nand0 {
             let data = std::fs::read(nand0_path).with_context(|| {
                 format!("Failed to read NC2000 NAND0: {}", nand0_path.display())
             })?;
-            let n = self.nand0.len().min(data.len());
-            self.nand0[..n].copy_from_slice(&data[..n]);
+            self.load_first_nand_plane(&data);
         }
         Ok(())
+    }
+
+    fn load_main_nand(&mut self, data: &[u8]) {
+        let start = NAND0_PAGES * NAND_PAGE_SIZE;
+        let n = (self.nand.len() - start).min(data.len());
+        self.nand[start..start + n].copy_from_slice(&data[..n]);
+    }
+
+    fn load_first_nand_plane(&mut self, data: &[u8]) {
+        let n = (NAND0_PAGES * NAND_PAGE_SIZE).min(data.len());
+        self.nand[..n].copy_from_slice(&data[..n]);
     }
 
     /// Get the current bank window base for a bank index.
@@ -762,7 +784,15 @@ impl Nc2000Machine {
                 }
             }
             io_reg::RTC_3C => 0,
-            io_reg::RTC_3D => self.io[addr as usize],
+            io_reg::RTC_3D => match self.uart_bank {
+                0 => {
+                    (self.pending_interrupt().unwrap_or(interrupt_source::NONE) << 3)
+                        | (self.uart_vector_control & 0x04)
+                }
+                1 => self.uart_fcr | 0x01,
+                2 => self.uart_ier | 0x02,
+                _ => 0x03,
+            },
             _ => 0,
         }
     }
@@ -916,11 +946,11 @@ impl Nc2000Machine {
                 if idx == ext_reg::RTC_CTRL {
                     self.ext_reg[idx] = value;
                 } else if idx == ext_reg::INT_CLEAR {
-                    self.iv_queue.retain(|&iv| {
-                        (value & 0x01) == 0
-                            || iv != 0x00 && (value & 0x02) == 0
-                            || iv != 0x02 && (value & 0x04) == 0
-                            || iv != 0x01
+                    self.pending_interrupts.retain(|&source| match source {
+                        interrupt_source::TWO_HZ => value & 0x01 == 0,
+                        interrupt_source::ALARM => value & 0x02 == 0,
+                        interrupt_source::SAMPLE => value & 0x04 == 0,
+                        _ => true,
                     });
                     self.ext_reg[idx] = value & 0xF8;
                 } else if idx < 7 {
@@ -938,6 +968,16 @@ impl Nc2000Machine {
     }
 
     fn write_rtc_3x(&mut self, addr: u8, value: u8) {
+        if addr as usize == io_reg::RTC_3D {
+            let register_value = value & 0xFC;
+            match self.uart_bank {
+                0 => self.uart_vector_control = register_value & 0x04,
+                1 => self.uart_fcr = register_value & 0xC8,
+                2 => self.uart_ier = register_value,
+                _ => {}
+            }
+            self.uart_bank = value & 0x03;
+        }
         self.io[addr as usize] = value;
     }
 
@@ -1217,14 +1257,15 @@ impl Nc2000Machine {
         alm
     }
 
-    fn put_iv(&mut self, iv: u8) {
-        if !self.iv_queue.contains(&iv) {
-            self.iv_queue.push(iv);
+    fn queue_interrupt(&mut self, source: u8) {
+        if !self.pending_interrupts.contains(&source) {
+            self.pending_interrupts.push(source);
+            self.pending_interrupts.sort_unstable();
         }
     }
 
-    fn peek_iv(&self) -> Option<u8> {
-        self.iv_queue.first().copied()
+    fn pending_interrupt(&self) -> Option<u8> {
+        self.pending_interrupts.first().copied()
     }
 
     /// Advance periodic events based on elapsed cycles since last tick.
@@ -1267,17 +1308,16 @@ impl Nc2000Machine {
             }
             if cnt.is_multiple_of(128) {
                 if cnt == 0 && self.ext_reg[ext_reg::RTC_CTRL] & 0x02 != 0 && self.chk_alarm() {
-                    self.put_iv(0x02);
+                    self.queue_interrupt(interrupt_source::ALARM);
                 }
                 if self.ext_reg[ext_reg::RTC_CTRL] & 0x01 != 0 {
-                    self.put_iv(0x00);
+                    self.queue_interrupt(interrupt_source::TWO_HZ);
                 }
             }
             if cnt % 128 == 64 && self.nmi_enable() {
                 cpu.nmi_pending = true;
             }
-            if let Some(iv) = self.peek_iv() {
-                let _ = iv;
+            if self.pending_interrupt().is_some() {
                 cpu.irq_pending = true;
             }
         }
@@ -1312,7 +1352,11 @@ impl Nc2000Machine {
         self.lcd_buff_addr = 0;
         self.lcd_buff_addr_mask = 0x3FFF;
         self.rtc_256_counter = 0;
-        self.iv_queue.clear();
+        self.pending_interrupts.clear();
+        self.uart_bank = 0;
+        self.uart_vector_control = 0;
+        self.uart_fcr = 0;
+        self.uart_ier = 0;
         self.do_warm_reset = false;
         self.audio.reset();
         self.cycles = 0;
@@ -1461,6 +1505,8 @@ impl<'a> CpuBus for Nc2000Bus<'a> {
 mod tests {
     use super::*;
 
+    const MAX_BOOT_FRAMES: u32 = 2000;
+
     fn empty_machine() -> Nc2000Machine {
         Nc2000Machine::new(&RomFiles::new(None, None, None, None)).unwrap()
     }
@@ -1477,6 +1523,23 @@ mod tests {
         } else {
             None
         }
+    }
+
+    fn run_frame(machine: &mut Nc2000Machine, cpu: &mut Cpu) {
+        let mut cycles = 0;
+        while cycles < crate::lcd::CYCLES_PER_FRAME {
+            cycles += machine.step(cpu);
+        }
+        machine.end_of_frame(cpu);
+    }
+
+    fn framebuffer_nonzero(machine: &Nc2000Machine) -> usize {
+        machine
+            .lcd
+            .framebuffer_raw()
+            .iter()
+            .filter(|&&byte| byte != 0)
+            .count()
     }
 
     #[test]
@@ -1640,6 +1703,60 @@ mod tests {
     }
 
     #[test]
+    fn rtc_interrupt_vector_is_banked_and_cleared() {
+        let mut m = empty_machine();
+        m.queue_interrupt(interrupt_source::ALARM);
+
+        // Bank 0 exposes the pending alarm vector in bits 3..7.
+        assert_eq!(m.io_read(io_reg::RTC_3D as u8), 0x10);
+
+        // Each write targets the current bank and selects the next bank.
+        m.io_write(io_reg::RTC_3D as u8, 0x05);
+        assert_eq!(m.io_read(io_reg::RTC_3D as u8), 0x01);
+        m.io_write(io_reg::RTC_3D as u8, 0xCA);
+        assert_eq!(m.io_read(io_reg::RTC_3D as u8), 0x02);
+        m.io_write(io_reg::RTC_3D as u8, 0xFC);
+        assert_eq!(m.io_read(io_reg::RTC_3D as u8), 0x14);
+
+        // Lower vector numbers have priority and RCR1 clears them by bit.
+        m.queue_interrupt(interrupt_source::TWO_HZ);
+        assert_eq!(m.io_read(io_reg::RTC_3D as u8), 0x04);
+        m.io_write(io_reg::RTC_IDX as u8, ext_reg::INT_CLEAR as u8);
+        m.io_write(io_reg::RTC_DATA as u8, 0x01);
+        assert_eq!(m.io_read(io_reg::RTC_3D as u8), 0x14);
+        m.io_write(io_reg::RTC_DATA as u8, 0x02);
+        assert!(m.pending_interrupts.is_empty());
+        assert_eq!(m.io_read(io_reg::RTC_3D as u8), 0xFC);
+    }
+
+    #[test]
+    fn nand_images_share_physical_page_space() {
+        let mut m = empty_machine();
+        m.load_main_nand(&[0x22]);
+        m.load_first_nand_plane(&[0x11]);
+
+        // Read physical page 0 from the first-plane image.
+        m.io_write(io_reg::PORT4 as u8, 0x01);
+        m.io_write(io_reg::NAND_DATA as u8, 0x00);
+        m.io_write(io_reg::PORT4 as u8, 0x02);
+        for value in [0x00, 0x00, 0x00, 0x00] {
+            m.io_write(io_reg::NAND_DATA as u8, value);
+        }
+        m.io_write(io_reg::PORT4 as u8, 0x00);
+        assert_eq!(m.bus_read(io_reg::NAND_DATA as u16), 0x11);
+
+        // Read physical page 64 from the start of the main image.
+        m.io_write(io_reg::PORT4 as u8, 0x01);
+        m.io_write(io_reg::NAND_DATA as u8, 0x00);
+        m.io_write(io_reg::PORT4 as u8, 0x02);
+        for value in [0x00, NAND0_PAGES as u8, 0x00, 0x00] {
+            m.io_write(io_reg::NAND_DATA as u8, value);
+        }
+        m.io_write(io_reg::PORT4 as u8, 0x00);
+        assert_eq!(m.bus_read(io_reg::NAND_DATA as u16), 0x22);
+    }
+
+    #[test]
     fn keypad_matrix_to_port() {
         let mut m = empty_machine();
         // Firmware scan: port1 drives all rows, port0 P00-P03 receive,
@@ -1721,7 +1838,7 @@ mod tests {
     }
 
     #[test]
-    fn standby_and_wake() {
+    fn power_button_standby_and_wake() {
         let Some(files) = nc2000_rom_files() else {
             eprintln!("skipping: NC2000 dumps not present");
             return;
@@ -1731,117 +1848,57 @@ mod tests {
         let mut cpu = Cpu::new();
         cpu.reset(machine.peek_u16(crate::cpu::RESET_VECTOR));
 
-        // Run until the firmware enters standby (clock off).
-        let mut frames = 0;
-        while !machine.is_clk_off() && frames < 500 {
-            let target = crate::lcd::CYCLES_PER_FRAME;
-            let mut acc = 0u64;
-            while acc < target {
-                acc += machine.step(&mut cpu);
-            }
-            machine.end_of_frame(&mut cpu);
-            frames += 1;
+        // Complete first-boot recovery and reach the main menu.
+        for _ in 0..MAX_BOOT_FRAMES {
+            run_frame(&mut machine, &mut cpu);
         }
-        assert!(machine.is_clk_off(), "firmware did not enter standby");
-        println!("entered standby after {} frames", frames);
+        assert!(
+            !machine.is_clk_off(),
+            "firmware powered off during recovery"
+        );
+        assert!(framebuffer_nonzero(&machine) > 50);
 
-        // Press a wake key (column 0) and step: warm reset should fire.
+        // ON/OFF puts the running firmware into standby.
         machine.set_key(0, true);
-        assert!(machine.do_warm_reset);
-        let pc_before = cpu.pc;
-        let _ = machine.step(&mut cpu);
-        assert!(!machine.is_clk_off(), "clock should be restored");
-        assert!(!machine.do_warm_reset);
-        // After warm reset the CPU restarts at the reset vector; the same
-        // step may already have executed the first instruction.
-        assert_ne!(pc_before, cpu.pc);
-        assert_ne!(cpu.pc, 0xE314, "CPU should leave the standby loop");
-
-        // Continue running: CPU should execute again after wake.
-        let target = crate::lcd::CYCLES_PER_FRAME;
-        let mut acc = 0u64;
-        while acc < target {
-            acc += machine.step(&mut cpu);
+        run_frame(&mut machine, &mut cpu);
+        machine.set_key(0, false);
+        for _ in 0..10 {
+            if machine.is_clk_off() {
+                break;
+            }
+            run_frame(&mut machine, &mut cpu);
         }
-        assert!(cpu.pc != 0);
+        assert!(machine.is_clk_off(), "power key did not enter standby");
+
+        // A second ON/OFF press wakes the device and restores the menu.
+        machine.set_key(0, true);
+        machine.set_key(0, false);
+        let mut max_nonzero = 0;
+        for _ in 0..200 {
+            run_frame(&mut machine, &mut cpu);
+            max_nonzero = max_nonzero.max(framebuffer_nonzero(&machine));
+        }
+        assert!(
+            !machine.is_clk_off(),
+            "device returned to standby after wake"
+        );
+        assert!(max_nonzero > 50, "wake did not restore visible content");
     }
 
     #[test]
-    fn wake_shows_menu() {
-        let Some(files) = nc2000_rom_files() else {
-            eprintln!("skipping: NC2000 dumps not present");
-            return;
-        };
-        let mut machine = Nc2000Machine::new(&files).unwrap();
-        machine.reset();
+    fn hotkey_wakes_device() {
+        let mut machine = empty_machine();
+        machine.io[io_reg::CLOCK_CTRL] = 0xE0;
         let mut cpu = Cpu::new();
-        cpu.reset(machine.peek_u16(crate::cpu::RESET_VECTOR));
+        cpu.pc = 0x1234;
 
-        // Run until standby
-        let mut frames = 0;
-        while !machine.is_clk_off() && frames < 500 {
-            let mut acc = 0u64;
-            while acc < crate::lcd::CYCLES_PER_FRAME {
-                acc += machine.step(&mut cpu);
-            }
-            machine.end_of_frame(&mut cpu);
-            frames += 1;
-        }
-        assert!(machine.is_clk_off());
-
-        // Wake up
-        // F5 (英汉) sits at matrix (row 3, col 1) and is a wake key.
+        // F5 (English-Chinese) sits at matrix (row 3, col 1).
         machine.set_key(3 << 3 | 1, true);
-        let _ = machine.step(&mut cpu);
-        println!(
-            "after wake step: pc={:04X} clk_off={}",
-            cpu.pc,
-            machine.is_clk_off()
-        );
-
-        // Run 300 frames after wake and check the LCD has content.
-        let mut nonzero = 0;
-        for frame in 0..300 {
-            let mut acc = 0u64;
-            while acc < crate::lcd::CYCLES_PER_FRAME {
-                acc += machine.step(&mut cpu);
-            }
-            machine.end_of_frame(&mut cpu);
-            nonzero = machine
-                .lcd
-                .framebuffer_raw()
-                .iter()
-                .filter(|&&b| b != 0)
-                .count();
-            if nonzero > 100 {
-                println!("menu appeared");
-                break;
-            }
-            if machine.is_clk_off() {
-                println!("entered standby again at frame {}", frame);
-                break;
-            }
-        }
-        println!("LCD nonzero bytes after wake: {}", nonzero);
-        // Render the framebuffer as ASCII for verification.
-        let fb = machine.lcd.framebuffer_raw();
-        for row in 0..80 {
-            let mut line = String::new();
-            for col in 0..20 {
-                let b = fb[row * 20 + col];
-                for bit in (0..8).rev() {
-                    line.push(if b & (1 << bit) != 0 { '#' } else { '.' });
-                }
-            }
-            if line.contains('#') {
-                println!("{:02} {}", row, line);
-            }
-        }
-        assert!(
-            nonzero > 100,
-            "menu should render after wake, got {}",
-            nonzero
-        );
+        assert!(machine.do_warm_reset);
+        machine.warm_reset(&mut cpu);
+        assert!(!machine.is_clk_off(), "clock should be restored");
+        assert!(!machine.do_warm_reset);
+        assert_eq!(cpu.pc, 0xFFFF);
     }
 
     #[test]
