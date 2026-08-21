@@ -1,11 +1,11 @@
 # WQXEmu —— Wenquxing NC1020 Emulator
 
 <p align="center">
-  <a href="https://jiangxincode.github.io/WQXEmu/"><img src="https://img.shields.io/badge/Website-WQXEmu-E8553A?logo=githubpages&logoColor=white" alt="Website"></a>
-  <a href="https://github.com/jiangxincode/WQXEmu/actions/workflows/ci.yml"><img src="https://github.com/jiangxincode/WQXEmu/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/jiangxincode/WQXEmu/releases/latest"><img src="https://img.shields.io/github/v/release/jiangxincode/WQXEmu" alt="Release"></a>
-  <a href="https://github.com/jiangxincode/WQXEmu/releases"><img src="https://img.shields.io/github/downloads/jiangxincode/WQXEmu/total" alt="Downloads"></a>
-  <a href="https://sonarcloud.io/dashboard?id=jiangxincode_WQXEmu"><img src="https://sonarcloud.io/api/project_badges/measure?project=jiangxincode_WQXEmu&metric=alert_status" alt="Quality Gate Status"></a>
+  <a href="https://AloysHF.github.io/WQXEmu/"><img src="https://img.shields.io/badge/Website-WQXEmu-E8553A?logo=githubpages&logoColor=white" alt="Website"></a>
+  <a href="https://github.com/AloysHF/WQXEmu/actions/workflows/ci.yml"><img src="https://github.com/AloysHF/WQXEmu/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/AloysHF/WQXEmu/releases/latest"><img src="https://img.shields.io/github/v/release/AloysHF/WQXEmu" alt="Release"></a>
+  <a href="https://github.com/AloysHF/WQXEmu/releases"><img src="https://img.shields.io/github/downloads/AloysHF/WQXEmu/total" alt="Downloads"></a>
+  <a href="https://sonarcloud.io/dashboard?id=AloysHF_WQXEmu"><img src="https://sonarcloud.io/api/project_badges/measure?project=AloysHF_WQXEmu&metric=alert_status" alt="Quality Gate Status"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPLv3%2B-blue.svg" alt="License: GPLv3 or later"></a>
 </p>
 
