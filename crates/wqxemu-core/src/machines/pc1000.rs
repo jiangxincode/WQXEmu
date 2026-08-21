@@ -22,6 +22,8 @@
 // erase, software ID, info block).
 
 use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
+use serde_big_array::BigArray;
 
 use crate::audio::Audio;
 use crate::cpu::{Cpu, CpuBus};
@@ -99,7 +101,7 @@ const TICK_CYCLES: u64 = CPU_FREQ as u64 / TICK_HZ;
 const NMI_CYCLES: u64 = CPU_FREQ as u64 / 2;
 
 /// NOR command state machine states.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 enum NorCmd {
     None,
     SwId,
@@ -112,7 +114,7 @@ enum NorCmd {
 }
 
 /// A resolved 8KB memory window target.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 enum Page {
     Ram(usize),
     Rom(usize),
@@ -120,16 +122,22 @@ enum Page {
 }
 
 /// PC1000 machine.
+#[derive(Serialize, Deserialize)]
 pub struct Pc1000Machine {
     ram: Vec<u8>,
+    #[serde(skip)]
     rom: Vec<u8>,
     nor: Vec<u8>,
+    #[serde(with = "BigArray")]
     nor_info_block: [u8; 0x100],
     /// NOR dump was stored half-swapped (swap back on save).
     nor_swapped: bool,
+    #[serde(with = "BigArray")]
     io: [u8; 0x80],
     /// Volume bank base tables (bank index -> ROM offset).
+    #[serde(with = "BigArray")]
     vol0: [usize; NUM_ROM_BANKS],
+    #[serde(with = "BigArray")]
     vol1: [usize; NUM_ROM_BANKS],
     /// BBS page ROM offsets for the current volume.
     bbs: [usize; 16],
@@ -994,6 +1002,22 @@ impl Machine for Pc1000Machine {
         self.dsp_ret = 0;
         self.is_play_music = false;
         self.update_map();
+    }
+
+    fn save_persistent_state(&self) -> Result<Vec<u8>> {
+        bincode::serialize(self).context("Failed to serialize PC1000 persistent state")
+    }
+
+    fn load_persistent_state(&mut self, data: &[u8]) -> Result<()> {
+        let mut restored: Self =
+            bincode::deserialize(data).context("Failed to deserialize PC1000 persistent state")?;
+        restored.rom = std::mem::take(&mut self.rom);
+        *self = restored;
+        Ok(())
+    }
+
+    fn persistent_state_identity(&self) -> u64 {
+        crate::save::persistent_identity(&self.rom)
     }
 }
 

@@ -22,6 +22,8 @@
 // is 512KB with 16 x 32KB banks and the same half-swapped dump layout.
 
 use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
+use serde_big_array::BigArray;
 
 use crate::audio::Audio;
 use crate::cpu::{Cpu, CpuBus};
@@ -95,7 +97,7 @@ const TICK_CYCLES: u64 = CPU_FREQ as u64 / TICK_HZ;
 const NMI_CYCLES: u64 = CPU_FREQ as u64 / 2;
 
 /// NOR command state machine states.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 enum NorCmd {
     None,
     SwId,
@@ -108,7 +110,7 @@ enum NorCmd {
 }
 
 /// A resolved 8KB memory window target.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 enum Page {
     Ram(usize),
     Rom(usize),
@@ -116,14 +118,20 @@ enum Page {
 }
 
 /// CC800 machine.
+#[derive(Serialize, Deserialize)]
 pub struct Cc800Machine {
     ram: Vec<u8>,
+    #[serde(skip)]
     rom: Vec<u8>,
     nor: Vec<u8>,
+    #[serde(with = "BigArray")]
     nor_info_block: [u8; 0x100],
+    #[serde(with = "BigArray")]
     io: [u8; 0x80],
     /// Volume bank base tables (bank index -> ROM offset).
+    #[serde(with = "BigArray")]
     vol0: [usize; NUM_ROM_BANKS],
+    #[serde(with = "BigArray")]
     vol1: [usize; NUM_ROM_BANKS],
     /// BBS page targets for the current volume.
     bbs: [Page; 16],
@@ -997,6 +1005,22 @@ impl Machine for Cc800Machine {
         self.lcd_off = false;
         self.do_warm_reset = false;
         self.update_map();
+    }
+
+    fn save_persistent_state(&self) -> Result<Vec<u8>> {
+        bincode::serialize(self).context("Failed to serialize CC800 persistent state")
+    }
+
+    fn load_persistent_state(&mut self, data: &[u8]) -> Result<()> {
+        let mut restored: Self =
+            bincode::deserialize(data).context("Failed to deserialize CC800 persistent state")?;
+        restored.rom = std::mem::take(&mut self.rom);
+        *self = restored;
+        Ok(())
+    }
+
+    fn persistent_state_identity(&self) -> u64 {
+        crate::save::persistent_identity(&self.rom)
     }
 }
 

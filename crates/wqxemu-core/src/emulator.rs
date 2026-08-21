@@ -6,14 +6,14 @@
 
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 use crate::audio::SAMPLE_RATE;
 use crate::cpu::{Cpu, RESET_VECTOR};
 use crate::lcd::{CYCLES_PER_FRAME, LCD_HEIGHT, LCD_WIDTH};
 use crate::machine::{Machine, MachineModel, RomFiles};
 use crate::machines;
-use crate::save::SaveState;
+use crate::save::{PersistentState, SaveState, PERSISTENT_STATE_VERSION};
 
 /// Main emulator struct.
 pub struct Emulator {
@@ -177,5 +177,80 @@ impl Emulator {
     pub fn load_state(&mut self, state: &SaveState) -> Result<()> {
         self.machine.load_state(&mut self.cpu, state);
         Ok(())
+    }
+
+    /// Serialize a complete cross-process session.
+    pub fn save_persistent_state(&self) -> Result<Vec<u8>> {
+        let state = PersistentState {
+            version: PERSISTENT_STATE_VERSION,
+            model: self.model(),
+            machine_identity: self.machine.persistent_state_identity(),
+            cpu: self.cpu.clone(),
+            frame_count: self.frame_count,
+            speed_up: self.speed_up,
+            machine: self.machine.save_persistent_state()?,
+        };
+        bincode::serialize(&state).context("Failed to serialize persistent state")
+    }
+
+    /// Restore a complete cross-process session.
+    pub fn load_persistent_state(&mut self, data: &[u8]) -> Result<()> {
+        let state: PersistentState =
+            bincode::deserialize(data).context("Failed to deserialize persistent state")?;
+        if state.version != PERSISTENT_STATE_VERSION {
+            anyhow::bail!(
+                "Persistent state version mismatch: expected {}, got {}",
+                PERSISTENT_STATE_VERSION,
+                state.version
+            );
+        }
+        if state.model != self.model() {
+            anyhow::bail!(
+                "Persistent state model mismatch: expected {}, got {}",
+                self.model().name(),
+                state.model.name()
+            );
+        }
+        let machine_identity = self.machine.persistent_state_identity();
+        if state.machine_identity != machine_identity {
+            anyhow::bail!("Persistent state firmware mismatch");
+        }
+
+        self.machine.load_persistent_state(&state.machine)?;
+        self.cpu = state.cpu;
+        self.frame_count = state.frame_count;
+        self.speed_up = state.speed_up;
+        self.machine.set_speed_up(state.speed_up);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn persistent_state_round_trips_without_rom_or_flash_paths() {
+        let mut emulator = Emulator::new(MachineModel::Nc1020, &RomFiles::default()).unwrap();
+        emulator.cpu.pc = 0x1234;
+        emulator.frame_count = 42;
+
+        let state = emulator.save_persistent_state().unwrap();
+        emulator.cpu.pc = 0x5678;
+        emulator.frame_count = 99;
+        emulator.load_persistent_state(&state).unwrap();
+
+        assert_eq!(emulator.pc(), 0x1234);
+        assert_eq!(emulator.frame_count(), 42);
+    }
+
+    #[test]
+    fn persistent_state_rejects_a_different_machine_model() {
+        let source = Emulator::new(MachineModel::Nc1020, &RomFiles::default()).unwrap();
+        let state = source.save_persistent_state().unwrap();
+
+        let mut target = Emulator::new(MachineModel::Pc1000, &RomFiles::default()).unwrap();
+        let error = target.load_persistent_state(&state).unwrap_err();
+        assert!(error.to_string().contains("model mismatch"));
     }
 }

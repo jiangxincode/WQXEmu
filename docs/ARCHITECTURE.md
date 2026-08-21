@@ -41,6 +41,8 @@ To keep the frontends model-agnostic, the core is split into:
 - `peek()` / `peek_u16()` — debug reads
 - `lcd()` / `drain_audio()` — framebuffer and audio access
 - `save_state()` / `load_state()` — save/load support
+- `save_persistent_state()` / `load_persistent_state()` — complete
+  model-specific state used for cross-process sessions
 - `load_nor()` / `save_nor()` / `set_speed_up()` — optional overrides
 
 `RomFiles` carries the file paths for each storage device:
@@ -184,6 +186,9 @@ pub struct RomFiles {
 - Standby/wake: firmware switches the clock off (io[0x05] CKS=7) to enter
   standby; the CPU is suspended and a key press on matrix columns 0/1
   triggers a warm reset that restores the clock and restarts the CPU.
+- Persistent sessions include NC2000 NOR, NAND, RAM, registers, timers and
+  peripheral state, so a restored process resumes without rerunning first-boot
+  recovery. Source Flash dumps remain unchanged.
 - UART data transfer / infrared and the NC2000-specific NAND file system are
   not emulated yet; verified with the official NC2000 3.5 dump: the firmware
   completes first-boot recovery, reaches the menu, enters standby and wakes
@@ -207,6 +212,14 @@ and initializes the CPU from the machine's reset vector. `from_rom` is
 kept as a convenience for the NC1020 case. The frame loop calls
 `machine.step()` until `CYCLES_PER_FRAME` and then
 `machine.end_of_frame()`.
+
+The standalone frontend's optional `--state-file` path stores a gzip-compressed,
+versioned persistent session. The envelope binds the session to its hardware
+model and immutable firmware identity, while each `Machine` implementation
+serializes all mutable model-specific storage and peripheral state. Writes use
+a temporary file in the destination directory followed by an atomic replace.
+This path is separate from the compact Save State API used by libretro, so
+libretro serialization size and compatibility are unchanged.
 
 ## Model selection
 

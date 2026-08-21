@@ -32,6 +32,7 @@ A Wenquxing electronic dictionary emulator written in Rust, using Low-Level Emul
   are highlighted
 - **Audio system** — SPDS104A DSP emulation with tone generation
 - **Timer system** — multiple timer sources with interrupt generation
+- **Persistent sessions** — optional compressed state files resume any supported model without modifying source dumps
 - **RetroArch integration** — libretro core for use with RetroArch frontend
 - **Cross-platform** — Windows, macOS, Linux, Android, iOS, and webOS
 
@@ -44,8 +45,9 @@ A Wenquxing electronic dictionary emulator written in Rust, using Low-Level Emul
 # NC1020 (24MB ROM + 1MB NOR)
 cargo run --release -- roms/nc1020/obj_lu.bin -n roms/nc1020/nc1020.fls
 
-# NC2000 boots from NOR + NAND (the first-plane dump is required)
-cargo run --release -- --model nc2000 -n roms/nc2000/nc2000.nor --nand-path roms/nc2000/nc2000.nand --nand0-path roms/nc2000/nc2000.nand0
+# NC2000 boots from NOR + NAND (the first-plane dump is required).
+# The optional state file skips repeated first-boot recovery on later runs.
+cargo run --release -- --model nc2000 -n roms/nc2000/nc2000.nor --nand-path roms/nc2000/nc2000.nand --nand0-path roms/nc2000/nc2000.nand0 --state-file nc2000.wqxs
 
 # PC1000 (12MB ROM: obj1 + obj2 + obj3, plus 512KB NOR)
 cargo run --release -- --model pc1000 roms/pc1000.rom -n roms/pc1000.nor
@@ -65,6 +67,11 @@ cargo build -p wqxemu-libretro --release
 
 ROM dumps are not distributed with the repository (the local `roms/`
 directory is git-ignored); prepare your own dumps using the layout above.
+`--state-file PATH` works with every supported model. If the file exists, the
+desktop frontend restores it after loading the configured dumps; on a normal
+exit it atomically replaces only that compressed state file. ROM, NOR, NAND,
+and NAND0 source dumps remain read-only. Use a separate state file for each
+machine and firmware configuration; states from another model are rejected.
 
 ## Building
 
