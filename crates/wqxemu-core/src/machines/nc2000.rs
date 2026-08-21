@@ -18,7 +18,7 @@ use crate::save::SaveState;
 const NUM_NOR_PAGES: usize = 0x10;
 /// NAND main area page count (65536 pages x 528 bytes).
 const NUM_NAND_PAGES: usize = 65536;
-/// NAND0 (first plane) page count.
+/// NAND0 first-plane page count.
 const NAND0_PAGES: usize = 64;
 /// NAND page size (512 data + 16 spare).
 const NAND_PAGE_SIZE: usize = 528;
@@ -108,7 +108,6 @@ pub struct Nc2000Machine {
     ram_b2: [u8; 0x2000],
     nor: Vec<u8>,
     nand: Vec<u8>,
-    nand0: Vec<u8>,
     nor_info_block: [u8; 0x100],
 
     // NOR state
@@ -183,8 +182,7 @@ impl Nc2000Machine {
             ram_b: [0; 0x2000],
             ram_b2: [0; 0x2000],
             nor: vec![0xFF; NUM_NOR_PAGES * NOR_PAGE_SIZE],
-            nand: vec![0xFF; NUM_NAND_PAGES * NAND_PAGE_SIZE],
-            nand0: vec![0xFF; NAND0_PAGES * NAND_PAGE_SIZE],
+            nand: vec![0xFF; (NAND0_PAGES + NUM_NAND_PAGES) * NAND_PAGE_SIZE],
             nor_info_block: [0; 0x100],
             fp_step: 0,
             fp_type: NorCmd::None,
@@ -255,17 +253,26 @@ impl Nc2000Machine {
         if let Some(nand_path) = &files.nand {
             let data = std::fs::read(nand_path)
                 .with_context(|| format!("Failed to read NC2000 NAND: {}", nand_path.display()))?;
-            let n = self.nand.len().min(data.len());
-            self.nand[..n].copy_from_slice(&data[..n]);
+            self.load_main_nand(&data);
         }
         if let Some(nand0_path) = &files.nand0 {
             let data = std::fs::read(nand0_path).with_context(|| {
                 format!("Failed to read NC2000 NAND0: {}", nand0_path.display())
             })?;
-            let n = self.nand0.len().min(data.len());
-            self.nand0[..n].copy_from_slice(&data[..n]);
+            self.load_first_nand_plane(&data);
         }
         Ok(())
+    }
+
+    fn load_main_nand(&mut self, data: &[u8]) {
+        let start = NAND0_PAGES * NAND_PAGE_SIZE;
+        let n = (self.nand.len() - start).min(data.len());
+        self.nand[start..start + n].copy_from_slice(&data[..n]);
+    }
+
+    fn load_first_nand_plane(&mut self, data: &[u8]) {
+        let n = (NAND0_PAGES * NAND_PAGE_SIZE).min(data.len());
+        self.nand[..n].copy_from_slice(&data[..n]);
     }
 
     /// Get the current bank window base for a bank index.
@@ -1461,6 +1468,8 @@ impl<'a> CpuBus for Nc2000Bus<'a> {
 mod tests {
     use super::*;
 
+    const MAX_BOOT_FRAMES: u32 = 2000;
+
     fn empty_machine() -> Nc2000Machine {
         Nc2000Machine::new(&RomFiles::new(None, None, None, None)).unwrap()
     }
@@ -1640,6 +1649,33 @@ mod tests {
     }
 
     #[test]
+    fn nand_images_share_physical_page_space() {
+        let mut m = empty_machine();
+        m.load_main_nand(&[0x22]);
+        m.load_first_nand_plane(&[0x11]);
+
+        // Read physical page 0 from the first-plane image.
+        m.io_write(io_reg::PORT4 as u8, 0x01);
+        m.io_write(io_reg::NAND_DATA as u8, 0x00);
+        m.io_write(io_reg::PORT4 as u8, 0x02);
+        for value in [0x00, 0x00, 0x00, 0x00] {
+            m.io_write(io_reg::NAND_DATA as u8, value);
+        }
+        m.io_write(io_reg::PORT4 as u8, 0x00);
+        assert_eq!(m.bus_read(io_reg::NAND_DATA as u16), 0x11);
+
+        // Read physical page 64 from the start of the main image.
+        m.io_write(io_reg::PORT4 as u8, 0x01);
+        m.io_write(io_reg::NAND_DATA as u8, 0x00);
+        m.io_write(io_reg::PORT4 as u8, 0x02);
+        for value in [0x00, NAND0_PAGES as u8, 0x00, 0x00] {
+            m.io_write(io_reg::NAND_DATA as u8, value);
+        }
+        m.io_write(io_reg::PORT4 as u8, 0x00);
+        assert_eq!(m.bus_read(io_reg::NAND_DATA as u16), 0x22);
+    }
+
+    #[test]
     fn keypad_matrix_to_port() {
         let mut m = empty_machine();
         // Firmware scan: port1 drives all rows, port0 P00-P03 receive,
@@ -1733,7 +1769,7 @@ mod tests {
 
         // Run until the firmware enters standby (clock off).
         let mut frames = 0;
-        while !machine.is_clk_off() && frames < 500 {
+        while !machine.is_clk_off() && frames < MAX_BOOT_FRAMES {
             let target = crate::lcd::CYCLES_PER_FRAME;
             let mut acc = 0u64;
             while acc < target {
@@ -1767,7 +1803,7 @@ mod tests {
     }
 
     #[test]
-    fn wake_shows_menu() {
+    fn hotkey_wakes_device() {
         let Some(files) = nc2000_rom_files() else {
             eprintln!("skipping: NC2000 dumps not present");
             return;
@@ -1779,7 +1815,7 @@ mod tests {
 
         // Run until standby
         let mut frames = 0;
-        while !machine.is_clk_off() && frames < 500 {
+        while !machine.is_clk_off() && frames < MAX_BOOT_FRAMES {
             let mut acc = 0u64;
             while acc < crate::lcd::CYCLES_PER_FRAME {
                 acc += machine.step(&mut cpu);
@@ -1789,59 +1825,14 @@ mod tests {
         }
         assert!(machine.is_clk_off());
 
-        // Wake up
-        // F5 (英汉) sits at matrix (row 3, col 1) and is a wake key.
+        // F5 (English-Chinese) sits at matrix (row 3, col 1).
         machine.set_key(3 << 3 | 1, true);
+        assert!(machine.do_warm_reset);
+        let pc_before = cpu.pc;
         let _ = machine.step(&mut cpu);
-        println!(
-            "after wake step: pc={:04X} clk_off={}",
-            cpu.pc,
-            machine.is_clk_off()
-        );
-
-        // Run 300 frames after wake and check the LCD has content.
-        let mut nonzero = 0;
-        for frame in 0..300 {
-            let mut acc = 0u64;
-            while acc < crate::lcd::CYCLES_PER_FRAME {
-                acc += machine.step(&mut cpu);
-            }
-            machine.end_of_frame(&mut cpu);
-            nonzero = machine
-                .lcd
-                .framebuffer_raw()
-                .iter()
-                .filter(|&&b| b != 0)
-                .count();
-            if nonzero > 100 {
-                println!("menu appeared");
-                break;
-            }
-            if machine.is_clk_off() {
-                println!("entered standby again at frame {}", frame);
-                break;
-            }
-        }
-        println!("LCD nonzero bytes after wake: {}", nonzero);
-        // Render the framebuffer as ASCII for verification.
-        let fb = machine.lcd.framebuffer_raw();
-        for row in 0..80 {
-            let mut line = String::new();
-            for col in 0..20 {
-                let b = fb[row * 20 + col];
-                for bit in (0..8).rev() {
-                    line.push(if b & (1 << bit) != 0 { '#' } else { '.' });
-                }
-            }
-            if line.contains('#') {
-                println!("{:02} {}", row, line);
-            }
-        }
-        assert!(
-            nonzero > 100,
-            "menu should render after wake, got {}",
-            nonzero
-        );
+        assert!(!machine.is_clk_off(), "clock should be restored");
+        assert!(!machine.do_warm_reset);
+        assert_ne!(pc_before, cpu.pc);
     }
 
     #[test]

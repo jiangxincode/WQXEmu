@@ -167,8 +167,9 @@ pub struct RomFiles {
 - No large ROM dump; firmware lives on NOR + NAND. Banks 0x00-0x0F select
   NOR pages (16 x 32KB), banks 0x80+ select extended RAM, and the fixed
   BIOS page at 0xE000-0xFFFF is NOR bank 0.
-- NAND controller: 528-byte pages (512 main + 16 spare), command sequence
-  via IO 0x18 (CLE/ALE/CE) and data via IO 0x29. Supports read
+- NAND controller: 528-byte pages (512 main + 16 spare). Physical pages 0-63
+  come from the `nand0` first-plane dump, followed by the main `nand` dump.
+  Command sequencing uses IO 0x18 (CLE/ALE/CE) and data IO 0x29. Supports read
   (0x00/0x01/0x50), program (0x80/0x10), erase (0x60/0xD0), status (0x70)
   and ID (0x90).
 - NOR controller: SPR4096 command sequences (software ID, byte program,
