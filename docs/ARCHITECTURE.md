@@ -159,6 +159,8 @@ pub struct RomFiles {
   a port-6 extension at 0x1E.
 - NOR block erase is 4KB. NAND commands (read/program/erase/status/ID)
   are shared with the NC2000.
+- The one-bit LCD framebuffer is read from its fixed internal RAM window at
+  0x19C0; the register-derived address is not used as the host buffer start.
 - Standby/wake: the firmware switches the clock off (CKS=7) to enter
   standby; pressing the power key at matrix (0,0) triggers a warm reset.
 - Verified with the official NC3000 firmware: cold boot draws the clock
@@ -181,6 +183,8 @@ pub struct RomFiles {
   (0x3E/0x3F), banked UART/interrupt-vector registers (0x3A-0x3D), DSP
   (0x30-0x33), battery (0x1C). RTC interrupt acknowledge bits clear their
   matching pending vectors.
+- The one-bit LCD framebuffer is read from its fixed internal RAM window at
+  0x19C0, preventing the bottom 20 rows from being displaced off-screen.
 - Keypad: 8x8 matrix with port conduction emulation driven by port
   direction registers.
 - Standby/wake: firmware switches the clock off (io[0x05] CKS=7) to enter

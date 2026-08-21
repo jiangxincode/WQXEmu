@@ -28,6 +28,8 @@ const NAND_PAGE_SIZE: usize = 528;
 const NOR_PAGE_SIZE: usize = 0x8000;
 /// Internal RAM size (24K) used by the 0x2000 window.
 const INTERNAL_RAM_SIZE: usize = 0x6000;
+/// Fixed start of the one-bit LCD framebuffer in internal RAM.
+const LCD_BUFFER_ADDR: usize = 0x19C0;
 
 /// IO register indexes used by the SPDC1016 model.
 #[allow(dead_code)]
@@ -1442,9 +1444,7 @@ impl Machine for Nc2000Machine {
     }
 
     fn end_of_frame(&mut self, _cpu: &mut Cpu) {
-        // Copy LCD framebuffer from RAM at the configured address.
-        let addr = (self.lcd_buff_addr & self.lcd_buff_addr_mask) as usize;
-        self.lcd.copy_from(&self.ram, addr);
+        self.lcd.copy_from(&self.ram, LCD_BUFFER_ADDR);
     }
 
     fn peek(&self, addr: u16) -> u8 {
@@ -1559,6 +1559,21 @@ mod tests {
             .iter()
             .filter(|&&byte| byte != 0)
             .count()
+    }
+
+    #[test]
+    fn lcd_reads_the_fixed_framebuffer_window() {
+        let mut machine = empty_machine();
+        let mut cpu = Cpu::new();
+        machine.lcd_buff_addr = 0x1830;
+        machine.ram[0x1830] = 0x55;
+        machine.ram[LCD_BUFFER_ADDR] = 0xAA;
+        machine.ram[LCD_BUFFER_ADDR + crate::lcd::LCD_BUFFER_SIZE - 1] = 0xCC;
+
+        machine.end_of_frame(&mut cpu);
+
+        assert_eq!(machine.lcd.framebuffer_raw()[0], 0xAA);
+        assert_eq!(machine.lcd.framebuffer_raw().last(), Some(&0xCC));
     }
 
     #[test]

@@ -24,7 +24,7 @@ A Wenquxing electronic dictionary emulator written in Rust, using Low-Level Emul
 - **6502/W65C02 CPU emulation** — cycle-accurate instruction execution with BCD support
 - **Bank-switched memory** — full memory map with NOR/NAND flash, RAM, and IO registers
 - **Multi-model architecture** — shared `Machine` trait with NC1020 / PC1000 / CC800 / NC2000 / NC3000 backends (PC1000 and CC800 boot to the main menu; NC2000/NC3000 boot to the clock screen with standby/wake)
-- **LCD display** — 160×80 pixel display with 4 grayscale levels and ghosting effects
+- **LCD display** — 160×80 pixel display with model-correct framebuffer placement, 4 grayscale levels, and ghosting effects
 - **Keyboard input** — complete QWERTY keyboard matrix emulation
 - **Device skins and virtual keypad** — the desktop frontend embeds the
   live LCD in a model-specific device image; the pictured keys can be
