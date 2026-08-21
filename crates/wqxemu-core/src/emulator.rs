@@ -10,7 +10,7 @@ use anyhow::{Context, Result};
 
 use crate::audio::SAMPLE_RATE;
 use crate::cpu::{Cpu, RESET_VECTOR};
-use crate::lcd::{CYCLES_PER_FRAME, LCD_HEIGHT, LCD_WIDTH};
+use crate::lcd::{LCD_HEIGHT, LCD_WIDTH};
 use crate::machine::{Machine, MachineModel, RomFiles};
 use crate::machines;
 use crate::save::{PersistentState, SaveState, PERSISTENT_STATE_VERSION};
@@ -96,7 +96,7 @@ impl Emulator {
 
     /// Run one frame (approximately 1/30 second).
     pub fn run_frame(&mut self) {
-        let target_cycles = CYCLES_PER_FRAME;
+        let target_cycles = self.machine.cycles_per_frame();
         let mut cycles_this_frame = 0u64;
 
         while cycles_this_frame < target_cycles {

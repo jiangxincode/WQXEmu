@@ -110,6 +110,11 @@ pub trait Machine: Send {
     /// Execute one CPU instruction. Returns the number of cycles consumed.
     fn step(&mut self, cpu: &mut Cpu) -> u64;
 
+    /// CPU cycles executed for one host video frame.
+    fn cycles_per_frame(&self) -> u64 {
+        crate::lcd::CYCLES_PER_FRAME
+    }
+
     /// Called once per frame after the CPU has run. Machines update their
     /// LCD framebuffer and handle wake-up here.
     fn end_of_frame(&mut self, cpu: &mut Cpu);

@@ -34,6 +34,8 @@ const NOR_PAGE_SIZE: usize = 0x8000;
 /// Internal RAM size (24K) used by the 0x2000 window.
 const INTERNAL_RAM_SIZE: usize = 0x6000;
 const AUTO_SLEEP_COUNTER_ADDR: usize = 0x0401;
+const CPU_FREQ: u32 = 10_240_000;
+const CYCLES_PER_FRAME: u64 = CPU_FREQ as u64 / crate::lcd::FRAME_RATE as u64;
 /// Fixed start of the one-bit LCD framebuffer in internal RAM.
 const LCD_BUFFER_ADDR: usize = 0x19C0;
 
@@ -1273,7 +1275,7 @@ impl Nc3000Machine {
         }
 
         // Timer A at 576*50 Hz
-        let ta_cycles = crate::timer::CPU_FREQ / (576 * 50);
+        let ta_cycles = CPU_FREQ / (576 * 50);
         self.cycles = self.cycles.wrapping_add(delta as u64);
         while self.cycles >= ta_cycles as u64 {
             self.cycles -= ta_cycles as u64;
@@ -1284,7 +1286,7 @@ impl Nc3000Machine {
 
         // Timebase ~185 Hz
         self.tb_cycles += delta as u64;
-        let tb_cycles = (crate::timer::CPU_FREQ / 185) as u64;
+        let tb_cycles = (CPU_FREQ / 185) as u64;
         while self.tb_cycles >= tb_cycles {
             self.tb_cycles -= tb_cycles;
             if self.time_base_enable() {
@@ -1295,14 +1297,17 @@ impl Nc3000Machine {
 
         // RTC 256 Hz
         self.rtc_cycles += delta as u64;
-        let rtc_cycles = (crate::timer::CPU_FREQ / 256) as u64;
+        let rtc_cycles = (CPU_FREQ / 256) as u64;
         while self.rtc_cycles >= rtc_cycles {
             self.rtc_cycles -= rtc_cycles;
-            self.rtc_256_counter = self.rtc_256_counter.wrapping_add(1);
-            let cnt = self.rtc_256_counter;
-            // Prevent the firmware's inactivity timer from immediately
-            // returning the desktop emulator to standby after startup.
-            self.ram[AUTO_SLEEP_COUNTER_ADDR] = 0;
+            self.ext_reg[ext_reg::TR_MS] = self.ext_reg[ext_reg::TR_MS].wrapping_add(1);
+            let cnt = self.ext_reg[ext_reg::TR_MS];
+            self.rtc_256_counter = cnt;
+            if cnt.is_multiple_of(64) {
+                // Prevent the firmware's inactivity timer from immediately
+                // returning the desktop emulator to standby after startup.
+                self.ram[AUTO_SLEEP_COUNTER_ADDR] = 0;
+            }
             if cnt == 0 {
                 self.bump_rtc();
             }
@@ -1413,6 +1418,10 @@ impl Machine for Nc3000Machine {
         false
     }
 
+    fn cycles_per_frame(&self) -> u64 {
+        CYCLES_PER_FRAME
+    }
+
     fn step(&mut self, cpu: &mut Cpu) -> u64 {
         if self.do_warm_reset {
             self.warm_reset(cpu);
@@ -1421,7 +1430,7 @@ impl Machine for Nc3000Machine {
         // With the clock off the CPU is suspended; still advance the
         // periodic timers (RTC keeps running while in standby).
         let cycles = if self.is_clk_off() {
-            crate::lcd::CYCLES_PER_FRAME
+            CYCLES_PER_FRAME
         } else {
             let mut bus = Nc3000Bus { machine: self };
             cpu.step(&mut bus)
@@ -1432,7 +1441,8 @@ impl Machine for Nc3000Machine {
     }
 
     fn end_of_frame(&mut self, _cpu: &mut Cpu) {
-        self.lcd.copy_from(&self.ram, LCD_BUFFER_ADDR);
+        self.lcd
+            .copy_from_with_persistence(&self.ram, LCD_BUFFER_ADDR);
     }
 
     fn peek(&self, addr: u16) -> u8 {
@@ -1583,7 +1593,7 @@ mod tests {
 
     fn run_frame(machine: &mut Nc3000Machine, cpu: &mut Cpu) {
         let mut acc = 0u64;
-        while acc < crate::lcd::CYCLES_PER_FRAME {
+        while acc < CYCLES_PER_FRAME {
             acc += machine.step(cpu);
         }
         machine.end_of_frame(cpu);
@@ -1624,25 +1634,30 @@ mod tests {
         );
     }
 
-    fn measure_sustained_screen(machine: &mut Nc3000Machine, cpu: &mut Cpu) -> usize {
-        for _ in 0..60 {
+    fn measure_sustained_screen(machine: &mut Nc3000Machine, cpu: &mut Cpu) -> (usize, u32) {
+        for _ in 0..180 {
             run_frame(machine, cpu);
         }
         let mut min_nonzero = usize::MAX;
+        let mut max_changed = 0;
+        let mut previous = machine.lcd.framebuffer_xrgb8888();
         for _ in 0..1200 {
             run_frame(machine, cpu);
-            let nonzero = machine
-                .lcd
-                .framebuffer_raw()
-                .iter()
-                .filter(|&&byte| byte != 0)
-                .count();
+            let current = machine.lcd.framebuffer_xrgb8888();
+            let nonzero = current.iter().filter(|&&pixel| pixel & 0xFF < 0xF0).count();
             min_nonzero = min_nonzero.min(nonzero);
+            let changed = previous
+                .iter()
+                .zip(&current)
+                .map(|(&a, &b)| (a & 0xFF).abs_diff(b & 0xFF))
+                .sum();
+            max_changed = max_changed.max(changed);
+            previous = current;
             if machine.is_clk_off() {
-                return 0;
+                return (0, u32::MAX);
             }
         }
-        min_nonzero
+        (min_nonzero, max_changed)
     }
 
     #[test]
@@ -1661,15 +1676,25 @@ mod tests {
     }
 
     #[test]
-    fn rtc_tick_clears_auto_sleep_counter() {
+    fn rtc_subsecond_register_drives_keep_awake_tick() {
         let mut machine = empty_machine();
         let mut cpu = Cpu::new();
         machine.ram[AUTO_SLEEP_COUNTER_ADDR] = 8;
-        machine.rtc_cycles = (crate::timer::CPU_FREQ / 256 - 1) as u64;
+        machine.ext_reg[ext_reg::TR_MS] = 0xFF;
+        machine.rtc_cycles = (CPU_FREQ / 256 - 1) as u64;
 
         machine.tick_periodic(&mut cpu, 1);
 
+        assert_eq!(machine.ext_reg[ext_reg::TR_MS], 0);
+        assert_eq!(machine.rtc_256_counter, 0);
         assert_eq!(machine.ram[AUTO_SLEEP_COUNTER_ADDR], 0);
+    }
+
+    #[test]
+    fn uses_nc3000_clock_rate_for_video_frames() {
+        let machine = empty_machine();
+
+        assert_eq!(machine.cycles_per_frame(), 10_240_000 / 30);
     }
 
     #[test]
@@ -1941,7 +1966,7 @@ mod tests {
         let start = std::time::Instant::now();
         for _ in 0..5 {
             // replicate Emulator::run_frame
-            let target = crate::lcd::CYCLES_PER_FRAME;
+            let target = CYCLES_PER_FRAME;
             let mut acc = 0u64;
             let mut steps = 0u64;
             while acc < target {
@@ -1983,8 +2008,9 @@ mod tests {
         assert!(!machine.is_clk_off(), "clock should be restored");
         assert!(!machine.do_warm_reset);
 
-        let min_nonzero = measure_sustained_screen(&mut machine, &mut cpu);
+        let (min_nonzero, max_changed) = measure_sustained_screen(&mut machine, &mut cpu);
         assert!(min_nonzero > 50, "power wake did not keep visible content");
+        assert!(max_changed < 200_000, "power wake screen kept flickering");
     }
 
     #[test]
@@ -1999,11 +2025,12 @@ mod tests {
         cpu.reset(machine.peek_u16(crate::cpu::RESET_VECTOR));
 
         preserve_nand_at_first_boot(&mut machine, &mut cpu);
-        let min_nonzero = measure_sustained_screen(&mut machine, &mut cpu);
+        let (min_nonzero, max_changed) = measure_sustained_screen(&mut machine, &mut cpu);
         assert!(
             min_nonzero > 50,
             "preserve path did not keep visible content"
         );
+        assert!(max_changed < 200_000, "preserve path kept flickering");
     }
 
     #[test]
@@ -2018,8 +2045,9 @@ mod tests {
         cpu.reset(machine.peek_u16(crate::cpu::RESET_VECTOR));
 
         confirm_first_boot(&mut machine, &mut cpu, (5 << 3) | 4);
-        let min_nonzero = measure_sustained_screen(&mut machine, &mut cpu);
+        let (min_nonzero, max_changed) = measure_sustained_screen(&mut machine, &mut cpu);
         assert!(min_nonzero > 50, "clear path did not keep visible content");
+        assert!(max_changed < 200_000, "clear path kept flickering");
     }
 
     #[test]
@@ -2037,7 +2065,7 @@ mod tests {
         let mut max_nonzero = 0;
         for _ in 0..150 {
             let mut acc = 0u64;
-            while acc < crate::lcd::CYCLES_PER_FRAME {
+            while acc < CYCLES_PER_FRAME {
                 acc += machine.step(&mut cpu);
             }
             machine.end_of_frame(&mut cpu);
