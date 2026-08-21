@@ -33,6 +33,7 @@ const NAND_MAGIC: &[u8] = b"ggv nc3000";
 const NOR_PAGE_SIZE: usize = 0x8000;
 /// Internal RAM size (24K) used by the 0x2000 window.
 const INTERNAL_RAM_SIZE: usize = 0x6000;
+const AUTO_SLEEP_COUNTER_ADDR: usize = 0x0401;
 /// Fixed start of the one-bit LCD framebuffer in internal RAM.
 const LCD_BUFFER_ADDR: usize = 0x19C0;
 
@@ -1299,6 +1300,9 @@ impl Nc3000Machine {
             self.rtc_cycles -= rtc_cycles;
             self.rtc_256_counter = self.rtc_256_counter.wrapping_add(1);
             let cnt = self.rtc_256_counter;
+            // Prevent the firmware's inactivity timer from immediately
+            // returning the desktop emulator to standby after startup.
+            self.ram[AUTO_SLEEP_COUNTER_ADDR] = 0;
             if cnt == 0 {
                 self.bump_rtc();
             }
@@ -1620,27 +1624,25 @@ mod tests {
         );
     }
 
-    fn wake_and_measure_screen(machine: &mut Nc3000Machine, cpu: &mut Cpu) -> usize {
-        machine.set_key(0, true);
-        run_frame(machine, cpu);
-        machine.set_key(0, false);
-
-        let mut max_nonzero = 0;
+    fn measure_sustained_screen(machine: &mut Nc3000Machine, cpu: &mut Cpu) -> usize {
         for _ in 0..60 {
-            if machine.is_clk_off() {
-                break;
-            }
             run_frame(machine, cpu);
-            max_nonzero = max_nonzero.max(
-                machine
-                    .lcd
-                    .framebuffer_raw()
-                    .iter()
-                    .filter(|&&byte| byte != 0)
-                    .count(),
-            );
         }
-        max_nonzero
+        let mut min_nonzero = usize::MAX;
+        for _ in 0..1200 {
+            run_frame(machine, cpu);
+            let nonzero = machine
+                .lcd
+                .framebuffer_raw()
+                .iter()
+                .filter(|&&byte| byte != 0)
+                .count();
+            min_nonzero = min_nonzero.min(nonzero);
+            if machine.is_clk_off() {
+                return 0;
+            }
+        }
+        min_nonzero
     }
 
     #[test]
@@ -1656,6 +1658,18 @@ mod tests {
 
         machine.set_key(0, false);
         assert!(!machine.keypad_matrix[4][0]);
+    }
+
+    #[test]
+    fn rtc_tick_clears_auto_sleep_counter() {
+        let mut machine = empty_machine();
+        let mut cpu = Cpu::new();
+        machine.ram[AUTO_SLEEP_COUNTER_ADDR] = 8;
+        machine.rtc_cycles = (crate::timer::CPU_FREQ / 256 - 1) as u64;
+
+        machine.tick_periodic(&mut cpu, 1);
+
+        assert_eq!(machine.ram[AUTO_SLEEP_COUNTER_ADDR], 0);
     }
 
     #[test]
@@ -1940,7 +1954,7 @@ mod tests {
     }
 
     #[test]
-    fn standby_and_wake() {
+    fn power_key_standby_and_wake_keeps_screen_visible() {
         let Some(files) = nc3000_rom_files() else {
             eprintln!("skipping: NC3000 dumps not present");
             return;
@@ -1951,62 +1965,49 @@ mod tests {
         cpu.reset(machine.peek_u16(crate::cpu::RESET_VECTOR));
 
         preserve_nand_at_first_boot(&mut machine, &mut cpu);
-
-        // Run until the firmware enters standby (clock off).
-        let mut frames = 0;
-        while !machine.is_clk_off() && frames < 500 {
-            let target = crate::lcd::CYCLES_PER_FRAME;
-            let mut acc = 0u64;
-            while acc < target {
-                acc += machine.step(&mut cpu);
-            }
-            machine.end_of_frame(&mut cpu);
-            frames += 1;
+        for _ in 0..120 {
+            run_frame(&mut machine, &mut cpu);
         }
-        assert!(machine.is_clk_off(), "firmware did not enter standby");
-        println!("entered standby after {} frames", frames);
 
-        // Press a wake key (column 0) and step: warm reset should fire.
         machine.set_key(0, true);
-        assert!(machine.do_warm_reset);
-        let pc_before = cpu.pc;
-        let _ = machine.step(&mut cpu);
-        assert!(!machine.is_clk_off(), "clock should be restored");
-        assert!(!machine.do_warm_reset);
-        // After warm reset the CPU restarts at the reset vector; the same
-        // step may already have executed the first instruction.
-        assert_ne!(pc_before, cpu.pc);
-        assert_ne!(cpu.pc, 0xE314, "CPU should leave the standby loop");
-
-        // Continue running: CPU should execute again after wake.
-        let target = crate::lcd::CYCLES_PER_FRAME;
-        let mut acc = 0u64;
-        while acc < target {
-            acc += machine.step(&mut cpu);
+        for _ in 0..3 {
+            run_frame(&mut machine, &mut cpu);
         }
-        assert!(cpu.pc != 0);
-    }
-
-    #[test]
-    fn power_key_wake_restores_visible_screen_after_preserving_nand() {
-        let Some(files) = nc3000_rom_files() else {
-            eprintln!("skipping: NC3000 dumps not present");
-            return;
-        };
-        let mut machine = Nc3000Machine::new(&files).unwrap();
-        machine.reset();
-        let mut cpu = Cpu::new();
-        cpu.reset(machine.peek_u16(crate::cpu::RESET_VECTOR));
-
-        preserve_nand_at_first_boot(&mut machine, &mut cpu);
+        machine.set_key(0, false);
         wait_for_standby(&mut machine, &mut cpu);
 
-        let max_nonzero = wake_and_measure_screen(&mut machine, &mut cpu);
-        assert!(max_nonzero > 50, "wake did not restore visible content");
+        machine.set_key(0, true);
+        assert!(machine.do_warm_reset);
+        run_frame(&mut machine, &mut cpu);
+        machine.set_key(0, false);
+        assert!(!machine.is_clk_off(), "clock should be restored");
+        assert!(!machine.do_warm_reset);
+
+        let min_nonzero = measure_sustained_screen(&mut machine, &mut cpu);
+        assert!(min_nonzero > 50, "power wake did not keep visible content");
     }
 
     #[test]
-    fn power_key_wake_restores_visible_screen_after_clearing_nand() {
+    fn preserve_path_keeps_screen_visible() {
+        let Some(files) = nc3000_rom_files() else {
+            eprintln!("skipping: NC3000 dumps not present");
+            return;
+        };
+        let mut machine = Nc3000Machine::new(&files).unwrap();
+        machine.reset();
+        let mut cpu = Cpu::new();
+        cpu.reset(machine.peek_u16(crate::cpu::RESET_VECTOR));
+
+        preserve_nand_at_first_boot(&mut machine, &mut cpu);
+        let min_nonzero = measure_sustained_screen(&mut machine, &mut cpu);
+        assert!(
+            min_nonzero > 50,
+            "preserve path did not keep visible content"
+        );
+    }
+
+    #[test]
+    fn clear_path_keeps_screen_visible() {
         let Some(files) = nc3000_rom_files() else {
             eprintln!("skipping: NC3000 dumps not present");
             return;
@@ -2017,10 +2018,8 @@ mod tests {
         cpu.reset(machine.peek_u16(crate::cpu::RESET_VECTOR));
 
         confirm_first_boot(&mut machine, &mut cpu, (5 << 3) | 4);
-        wait_for_standby(&mut machine, &mut cpu);
-
-        let max_nonzero = wake_and_measure_screen(&mut machine, &mut cpu);
-        assert!(max_nonzero > 50, "wake did not restore visible content");
+        let min_nonzero = measure_sustained_screen(&mut machine, &mut cpu);
+        assert!(min_nonzero > 50, "clear path did not keep visible content");
     }
 
     #[test]
