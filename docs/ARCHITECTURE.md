@@ -217,13 +217,13 @@ kept as a convenience for the NC1020 case. The frame loop calls
 
 ## Keyboard layouts (`keyboard.rs`)
 
-The frontend shows an on-screen keypad below the LCD. `keyboard.rs` is
-the single source of truth for the model-specific key matrices: each
-`KeyDef` carries the matrix position (`row << 3 | col`), the key-face
-label and the PC key hint. The desktop frontend (`wqxemu`) renders the
-keypad from `layout_for(model)`, highlights pressed keys, and accepts
-mouse clicks; the PC keyboard mapping in `main.rs` updates the same
-highlight state.
+The frontend embeds the live LCD in the matching model image from
+`res/`. `keyboard.rs` is the single source of truth for the model-specific
+key matrices: each `KeyDef` carries the matrix position (`row << 3 | col`),
+the key-face label and the PC key hint. The desktop frontend (`wqxemu`)
+maps those keys to their positions on the device skin, highlights pressed
+keys, and accepts mouse clicks; the PC keyboard mapping in `main.rs`
+updates the same highlight state.
 
 ## Adding a new model
 

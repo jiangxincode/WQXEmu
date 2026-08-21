@@ -15,7 +15,7 @@ use wqxemu_core::{
 };
 
 mod keypad;
-use keypad::{hit_test, render_keypad, KEYPAD_HEIGHT, KEYPAD_WIDTH};
+use keypad::DeviceSkin;
 
 /// WQXEmu - Wenquxing Emulator
 #[derive(Parser)]
@@ -41,8 +41,13 @@ struct Args {
     #[arg(long, help = "Hardware model (nc1020, pc1000, cc800, nc2000, nc3000)")]
     model: Option<String>,
 
-    /// Scale factor for the display
-    #[arg(short = 's', long, default_value = "4", help = "Display scale factor")]
+    /// Scale factor for the device skin (4 = 600 pixels high)
+    #[arg(
+        short = 's',
+        long,
+        default_value = "4",
+        help = "Device skin scale factor (4 = 600 pixels high)"
+    )]
     scale: u32,
 
     /// Take a screenshot after N frames and exit (saves as PNG)
@@ -329,6 +334,37 @@ fn map_key_nc3000(key: Key) -> Option<u8> {
     })
 }
 
+/// Map a resized window coordinate through the aspect-ratio letterbox.
+fn window_to_skin_pos(
+    mouse: (f32, f32),
+    window_size: (usize, usize),
+    skin_size: (usize, usize),
+) -> Option<(usize, usize)> {
+    let (window_width, window_height) = (window_size.0 as f32, window_size.1 as f32);
+    let (skin_width, skin_height) = (skin_size.0 as f32, skin_size.1 as f32);
+    if window_width <= 0.0 || window_height <= 0.0 {
+        return None;
+    }
+
+    let scale = (window_width / skin_width).min(window_height / skin_height);
+    let drawn_width = skin_width * scale;
+    let drawn_height = skin_height * scale;
+    let offset_x = (window_width - drawn_width) / 2.0;
+    let offset_y = (window_height - drawn_height) / 2.0;
+    if mouse.0 < offset_x
+        || mouse.0 >= offset_x + drawn_width
+        || mouse.1 < offset_y
+        || mouse.1 >= offset_y + drawn_height
+    {
+        return None;
+    }
+
+    Some((
+        ((mouse.0 - offset_x) / scale) as usize,
+        ((mouse.1 - offset_y) / scale) as usize,
+    ))
+}
+
 fn main() -> Result<()> {
     env_logger::init();
 
@@ -370,24 +406,17 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    // Create window
-    let scale = args.scale as usize;
-    let lcd_width = LCD_WIDTH * scale;
-    let lcd_height = LCD_HEIGHT * scale;
-    // The keypad panel sits below the LCD; the window is widened when
-    // the LCD is narrower than the panel so the keys stay readable.
-    let window_width = lcd_width.max(KEYPAD_WIDTH);
-    let window_height = lcd_height + KEYPAD_HEIGHT;
-    let lcd_x = (window_width - lcd_width) / 2;
-    let panel_x = (window_width - KEYPAD_WIDTH) / 2;
-    let panel_y = lcd_height;
+    // Create a normal resizable window whose client area is the device skin.
+    let skin = DeviceSkin::load(model, args.scale)?;
+    let window_width = skin.width();
+    let window_height = skin.height();
 
     let mut window = Window::new(
         &format!("WQXEmu - {}", model.name().to_uppercase()),
         window_width,
         window_height,
         WindowOptions {
-            resize: false,
+            resize: true,
             scale_mode: minifb::ScaleMode::AspectRatioStretch,
             ..WindowOptions::default()
         },
@@ -425,10 +454,13 @@ fn main() -> Result<()> {
 
         // Mouse: click the virtual keypad.
         let mouse_down = window.get_mouse_down(minifb::MouseButton::Left);
-        let mouse_pos = window.get_mouse_pos(minifb::MouseMode::Clamp);
-        let (mx, my) = mouse_pos.map_or((0, 0), |(x, y)| (x as usize, y as usize));
+        let mouse_pos = window
+            .get_unscaled_mouse_pos(minifb::MouseMode::Discard)
+            .and_then(|mouse| {
+                window_to_skin_pos(mouse, window.get_size(), (window_width, window_height))
+            });
         if mouse_down {
-            if let Some(key_id) = hit_test(mx, my, panel_x, panel_y, model, layout) {
+            if let Some(key_id) = mouse_pos.and_then(|(x, y)| skin.hit_test(x, y, layout)) {
                 if mouse_key != Some(key_id) {
                     if let Some(old) = mouse_key {
                         emu.set_key(old, false);
@@ -455,25 +487,7 @@ fn main() -> Result<()> {
         // Get framebuffer and render
         let pixels = emu.framebuffer();
 
-        // Scale the LCD framebuffer (centered) + draw the keypad below.
-        let mut buffer = vec![0u32; window_width * window_height];
-        for y in 0..lcd_height {
-            for x in 0..lcd_width {
-                let src_x = x / scale;
-                let src_y = y / scale;
-                let pixel = pixels[src_y * LCD_WIDTH + src_x];
-                buffer[y * window_width + lcd_x + x] = pixel;
-            }
-        }
-        render_keypad(
-            &mut buffer,
-            window_width,
-            panel_x,
-            panel_y,
-            model,
-            layout,
-            &pressed,
-        );
+        let buffer = skin.render(&pixels, layout, &pressed);
 
         window
             .update_with_buffer(&buffer, window_width, window_height)
@@ -502,4 +516,21 @@ fn save_screenshot(pixels: &[u32], path: &str) -> Result<()> {
 
     img.save(path)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::window_to_skin_pos;
+
+    #[test]
+    fn resized_window_coordinates_follow_the_letterboxed_skin() {
+        assert_eq!(
+            window_to_skin_pos((400.0, 300.0), (800, 600), (400, 600)),
+            Some((200, 300))
+        );
+        assert_eq!(
+            window_to_skin_pos((100.0, 300.0), (800, 600), (400, 600)),
+            None
+        );
+    }
 }
