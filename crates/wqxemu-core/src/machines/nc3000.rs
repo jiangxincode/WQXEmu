@@ -890,11 +890,10 @@ impl Nc3000Machine {
             }
             io_reg::ZP_BSW => {
                 self.io[addr as usize] = value;
-                let v = value & 0x07;
-                self.rw0f_b4_dir00 = v & 0x10 != 0;
-                self.rw0f_b5_dir01 = v & 0x20 != 0;
-                self.rw0f_b6_dir023 = v & 0x40 != 0;
-                self.rw0f_b7_dir047 = v & 0x80 != 0;
+                self.rw0f_b4_dir00 = value & 0x10 != 0;
+                self.rw0f_b5_dir01 = value & 0x20 != 0;
+                self.rw0f_b6_dir023 = value & 0x40 != 0;
+                self.rw0f_b7_dir047 = value & 0x80 != 0;
             }
             io_reg::TIMERA_VAL_L => {
                 self.tma_reload = (self.tma_reload & 0xFF00) | value as u32;
@@ -1388,12 +1387,19 @@ impl Machine for Nc3000Machine {
         // key_id encodes matrix position: row = key_id >> 3, col = key_id & 7
         let row = (key_id >> 3) as usize;
         let col = (key_id & 7) as usize;
-        if row < 8 && col < 8 {
-            self.keypad_matrix[row][col] = pressed;
+        // The frontend exposes power as logical (0,0), while the NC3000
+        // hardware scan matrix stores it at (4,0).
+        let (matrix_row, matrix_col) = if row == 0 && col == 0 {
+            (4, 0)
+        } else {
+            (row, col)
+        };
+        if matrix_row < 8 && matrix_col < 8 {
+            self.keypad_matrix[matrix_row][matrix_col] = pressed;
             self.update_keypad_registers();
         }
-        // The NC3000 power key sits at matrix (0,0); pressing it while
-        // the clock is off wakes the device (warm reset).
+        // Pressing the logical power key while the clock is off wakes the
+        // device through a warm reset.
         if pressed && row == 0 && col == 0 && self.is_clk_off() {
             self.do_warm_reset = true;
         }
@@ -1579,15 +1585,89 @@ mod tests {
         machine.end_of_frame(cpu);
     }
 
-    fn preserve_nand_at_first_boot(machine: &mut Nc3000Machine, cpu: &mut Cpu) {
+    fn confirm_first_boot(machine: &mut Nc3000Machine, cpu: &mut Cpu, key_id: u8) {
         for _ in 0..240 {
             run_frame(machine, cpu);
         }
-        machine.set_key((5 << 3) | 6, true);
+        machine.set_key(key_id, true);
         for _ in 0..3 {
             run_frame(machine, cpu);
         }
-        machine.set_key((5 << 3) | 6, false);
+        machine.set_key(key_id, false);
+    }
+
+    fn preserve_nand_at_first_boot(machine: &mut Nc3000Machine, cpu: &mut Cpu) {
+        confirm_first_boot(machine, cpu, (5 << 3) | 6);
+    }
+
+    fn wait_for_standby(machine: &mut Nc3000Machine, cpu: &mut Cpu) {
+        for _ in 0..3000 {
+            if machine.is_clk_off() {
+                return;
+            }
+            run_frame(machine, cpu);
+        }
+        panic!(
+            "firmware did not enter standby: pc={:04X} clock={:02X} nonzero={}",
+            cpu.pc,
+            machine.io[io_reg::CLOCK_CTRL],
+            machine
+                .lcd
+                .framebuffer_raw()
+                .iter()
+                .filter(|&&byte| byte != 0)
+                .count()
+        );
+    }
+
+    fn wake_and_measure_screen(machine: &mut Nc3000Machine, cpu: &mut Cpu) -> usize {
+        machine.set_key(0, true);
+        run_frame(machine, cpu);
+        machine.set_key(0, false);
+
+        let mut max_nonzero = 0;
+        for _ in 0..60 {
+            if machine.is_clk_off() {
+                break;
+            }
+            run_frame(machine, cpu);
+            max_nonzero = max_nonzero.max(
+                machine
+                    .lcd
+                    .framebuffer_raw()
+                    .iter()
+                    .filter(|&&byte| byte != 0)
+                    .count(),
+            );
+        }
+        max_nonzero
+    }
+
+    #[test]
+    fn power_key_uses_nc3000_hardware_matrix_position() {
+        let mut machine = empty_machine();
+        machine.io[io_reg::CLOCK_CTRL] = 0xFF;
+
+        machine.set_key(0, true);
+
+        assert!(machine.keypad_matrix[4][0]);
+        assert!(!machine.keypad_matrix[0][0]);
+        assert!(machine.do_warm_reset);
+
+        machine.set_key(0, false);
+        assert!(!machine.keypad_matrix[4][0]);
+    }
+
+    #[test]
+    fn zp_bsw_updates_port0_direction_bits() {
+        let mut machine = empty_machine();
+
+        machine.io_write(io_reg::ZP_BSW as u8, 0xF0);
+
+        assert!(machine.rw0f_b4_dir00);
+        assert!(machine.rw0f_b5_dir01);
+        assert!(machine.rw0f_b6_dir023);
+        assert!(machine.rw0f_b7_dir047);
     }
 
     #[test]
@@ -1908,7 +1988,7 @@ mod tests {
     }
 
     #[test]
-    fn wake_runs_until_next_standby() {
+    fn power_key_wake_restores_visible_screen_after_preserving_nand() {
         let Some(files) = nc3000_rom_files() else {
             eprintln!("skipping: NC3000 dumps not present");
             return;
@@ -1919,40 +1999,28 @@ mod tests {
         cpu.reset(machine.peek_u16(crate::cpu::RESET_VECTOR));
 
         preserve_nand_at_first_boot(&mut machine, &mut cpu);
+        wait_for_standby(&mut machine, &mut cpu);
 
-        // Run until standby
-        let mut frames = 0;
-        while !machine.is_clk_off() && frames < 500 {
-            let mut acc = 0u64;
-            while acc < crate::lcd::CYCLES_PER_FRAME {
-                acc += machine.step(&mut cpu);
-            }
-            machine.end_of_frame(&mut cpu);
-            frames += 1;
-        }
-        assert!(machine.is_clk_off());
+        let max_nonzero = wake_and_measure_screen(&mut machine, &mut cpu);
+        assert!(max_nonzero > 50, "wake did not restore visible content");
+    }
 
-        // Wake up with the power key at matrix (row 0, col 0).
-        machine.set_key(0, true);
-        let _ = machine.step(&mut cpu);
-        machine.set_key(0, false);
-        println!(
-            "after wake step: pc={:04X} clk_off={}",
-            cpu.pc,
-            machine.is_clk_off()
-        );
+    #[test]
+    fn power_key_wake_restores_visible_screen_after_clearing_nand() {
+        let Some(files) = nc3000_rom_files() else {
+            eprintln!("skipping: NC3000 dumps not present");
+            return;
+        };
+        let mut machine = Nc3000Machine::new(&files).unwrap();
+        machine.reset();
+        let mut cpu = Cpu::new();
+        cpu.reset(machine.peek_u16(crate::cpu::RESET_VECTOR));
 
-        // The CPU should resume and eventually return to standby.
-        let pc_after_wake = cpu.pc;
-        let mut progressed = false;
-        let mut frames = 0;
-        while !machine.is_clk_off() && frames < 300 {
-            run_frame(&mut machine, &mut cpu);
-            progressed |= cpu.pc != pc_after_wake;
-            frames += 1;
-        }
-        assert!(progressed, "firmware did not execute after wake");
-        assert!(machine.is_clk_off(), "firmware did not re-enter standby");
+        confirm_first_boot(&mut machine, &mut cpu, (5 << 3) | 4);
+        wait_for_standby(&mut machine, &mut cpu);
+
+        let max_nonzero = wake_and_measure_screen(&mut machine, &mut cpu);
+        assert!(max_nonzero > 50, "wake did not restore visible content");
     }
 
     #[test]

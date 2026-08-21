@@ -163,7 +163,9 @@ pub struct RomFiles {
 - The one-bit LCD framebuffer is read from its fixed internal RAM window at
   0x19C0; the register-derived address is not used as the host buffer start.
 - Standby/wake: the firmware switches the clock off (CKS=7) to enter
-  standby; pressing the power key at matrix (0,0) triggers a warm reset.
+  standby. The frontend's logical power key (0,0) triggers a warm reset and
+  is translated to the NC3000 hardware scan position (4,0), allowing the
+  firmware to observe the held key during startup.
 - Verified with the official NC3000 firmware: cold boot draws the clock
   screen, then enters standby and wakes on the power key.
 
