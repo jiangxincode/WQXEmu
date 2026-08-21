@@ -143,8 +143,9 @@ pub struct RomFiles {
 
 - The NC3000 is the faster sibling of the NC2000 (10.24 MHz CPU) and
   shares its NOR + NAND boot model. The NOR is 1MB (32 x 32KB banks) and
-  the NAND covers two planes (~66MB plus an optional 64-page first plane
-  dump that is left erased when absent).
+  the NAND covers two planes (~66MB plus an optional 64-page first-plane
+  dump). The main NAND follows those 64 pages; when `nand0` is absent, the
+  emulator initializes the NC3000 marker required by the firmware.
 - Memory map: 0x2000-0x3FFF is always RAM (no RAMB); banks 0x00-0x1F
   select NOR pages; banks 0x80+ are invalid (no extended RAM). Bank 0/1
   with ROA set map the whole 0x4000-0xBFFF window onto internal RAM
