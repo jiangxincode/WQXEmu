@@ -38,28 +38,40 @@ A Wenquxing electronic dictionary emulator written in Rust, using Low-Level Emul
 
 ## Quick Start
 
+Firmware dumps are passed with options named after the storage device:
+`--rom`, `--nor`, `--nand`, and `--nand0`. The required combination depends
+on the selected model.
+
+| Model | Required firmware | Optional firmware |
+|-------|-------------------|-------------------|
+| NC1020 | ROM + NOR | — |
+| PC1000 | ROM + NOR | — |
+| CC800 | ROM + NOR | — |
+| NC2000 | NOR + NAND + NAND0 | — |
+| NC3000 | NOR + NAND | NAND0 |
+
 ```bash
 # The commands below assume a roms/ directory at the repository root
 # (the test dumps are already there locally; ROMs are not distributed):
 
 # NC1020 (24MB ROM + 1MB NOR)
-cargo run --release -- roms/nc1020/obj_lu.bin -n roms/nc1020/nc1020.fls
+cargo run --release -- --model nc1020 --rom roms/nc1020/obj_lu.bin --nor roms/nc1020/nc1020.fls
 
 # NC2000 boots from NOR + NAND (the first-plane dump is required).
-cargo run --release -- --model nc2000 -n roms/nc2000/nc2000.nor --nand-path roms/nc2000/nc2000.nand --nand0-path roms/nc2000/nc2000.nand0
+cargo run --release -- --model nc2000 --nor roms/nc2000/nc2000.nor --nand roms/nc2000/nc2000.nand --nand0 roms/nc2000/nc2000.nand0
 
 # PC1000 (12MB ROM: obj1 + obj2 + obj3, plus 512KB NOR)
-cargo run --release -- --model pc1000 roms/pc1000.rom -n roms/pc1000.nor
+cargo run --release -- --model pc1000 --rom roms/pc1000.rom --nor roms/pc1000.nor
 
 # CC800 (16MB ROM: obj.bin, plus 512KB NOR)
-cargo run --release -- --model cc800 roms/cc800/obj.bin -n roms/cc800/cc800.fls
+cargo run --release -- --model cc800 --rom roms/cc800/obj.bin --nor roms/cc800/cc800.fls
 
 # NC3000 boots from NOR + NAND (1MB NOR + ~66MB NAND).
 # If NAND0 is omitted, the required first-plane marker is initialized in memory.
-cargo run --release -- --model nc3000 -n roms/nc3000/nc3000.nor --nand-path roms/nc3000/nc3000.nand
+cargo run --release -- --model nc3000 --nor roms/nc3000/nc3000.nor --nand roms/nc3000/nc3000.nand
 
 # Run headless for 300 frames and save a screenshot to the given path
-cargo run --release -- roms/nc1020/obj_lu.bin -n roms/nc1020/nc1020.fls --screenshot screenshot.png --screenshot-frames 300
+cargo run --release -- --model nc1020 --rom roms/nc1020/obj_lu.bin --nor roms/nc1020/nc1020.fls --screenshot screenshot.png --screenshot-frames 300
 
 # Build the libretro core for RetroArch
 cargo build -p wqxemu-libretro --release
@@ -76,7 +88,7 @@ machine and firmware configuration; states from another model are rejected.
 ```bash
 # Pass --state-file on the first run to create a compressed session state on exit.
 # Reuse the same state file on later runs to skip first-boot recovery.
-cargo run --release -- --model nc2000 -n roms/nc2000/nc2000.nor --nand-path roms/nc2000/nc2000.nand --nand0-path roms/nc2000/nc2000.nand0 --state-file nc2000.wqxs
+cargo run --release -- --model nc2000 --nor roms/nc2000/nc2000.nor --nand roms/nc2000/nc2000.nand --nand0 roms/nc2000/nc2000.nand0 --state-file nc2000.wqxs
 ```
 
 ## Building
