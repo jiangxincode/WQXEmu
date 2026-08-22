@@ -99,8 +99,8 @@ impl Lcd {
     /// Returns 160*80 = 12800 u32 values
     pub fn framebuffer_xrgb8888(&self) -> Vec<u32> {
         let mut pixels = Vec::with_capacity(LCD_WIDTH * LCD_HEIGHT);
-        let on_color: u32 = 0xFF000000;
-        let off_color: u32 = 0xFFFFFFFF;
+        let on_color: u32 = 0xFF000000; // Black (ARGB)
+        let off_color: u32 = 0xFFFFFFFF; // White (ARGB)
 
         for y in 0..LCD_HEIGHT {
             for x in 0..LCD_WIDTH {
@@ -121,8 +121,8 @@ impl Lcd {
     /// Returns 160*80*4 = 51200 bytes
     pub fn framebuffer_rgba8888(&self) -> Vec<u8> {
         let mut pixels = Vec::with_capacity(LCD_WIDTH * LCD_HEIGHT * 4);
-        let on_color: [u8; 4] = [0x00, 0x00, 0x00, 0xFF];
-        let off_color: [u8; 4] = [0xFF, 0xFF, 0xFF, 0xFF];
+        let on_color: [u8; 4] = [0x00, 0x00, 0x00, 0xFF]; // Black (RGBA)
+        let off_color: [u8; 4] = [0xFF, 0xFF, 0xFF, 0xFF]; // White (RGBA)
 
         for y in 0..LCD_HEIGHT {
             for x in 0..LCD_WIDTH {

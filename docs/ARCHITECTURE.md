@@ -51,8 +51,8 @@ To keep the frontends model-agnostic, the core is split into:
 pub struct RomFiles {
     pub rom: Option<PathBuf>,   // NC1020/PC1000 system ROM
     pub nor: Option<PathBuf>,   // NOR Flash dump
-    pub nand: Option<PathBuf>,  // NC2000 NAND dump
-    pub nand0: Option<PathBuf>, // NC2000 first NAND plane
+    pub nand: Option<PathBuf>,  // NC2000/NC3000 NAND dump
+    pub nand0: Option<PathBuf>, // NC2000/NC3000 first NAND plane
 }
 ```
 

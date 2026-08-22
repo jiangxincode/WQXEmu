@@ -2091,19 +2091,10 @@ mod tests {
         let mut cpu = Cpu::new();
         cpu.reset(machine.peek_u16(crate::cpu::RESET_VECTOR));
 
-        let start = std::time::Instant::now();
         for _ in 0..5 {
-            // replicate Emulator::run_frame
-            let target = machine.cycles_per_frame();
-            let mut acc = 0u64;
-            let mut steps = 0u64;
-            while acc < target {
-                acc += machine.step(&mut cpu);
-                steps += 1;
-            }
-            println!("frame done: cycles={} steps={}", acc, steps);
+            machine.run_frame(&mut cpu);
         }
-        println!("5 frames took {:?}", start.elapsed());
+        assert_eq!(machine.frame_phase, 5);
     }
 
     #[test]

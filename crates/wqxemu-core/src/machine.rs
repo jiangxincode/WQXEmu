@@ -58,8 +58,8 @@ impl MachineModel {
 ///
 /// - `rom`: system ROM dump (NC1020 `obj_lu.bin` / `.rom`, PC1000 `.rom`)
 /// - `nor`: NOR Flash dump (`.fls` / `.nor`)
-/// - `nand`: NAND Flash dump (NC2000 `.nand`)
-/// - `nand0`: first NAND plane (NC2000 `.nand0`, optional)
+/// - `nand`: NAND Flash dump (NC2000/NC3000 `.nand`)
+/// - `nand0`: first NAND plane (NC2000/NC3000 `.nand0`, optional)
 #[derive(Clone, Debug, Default)]
 pub struct RomFiles {
     pub rom: Option<PathBuf>,
