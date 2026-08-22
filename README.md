@@ -151,7 +151,7 @@ For detailed game list with screenshots and compatibility status, see:
 
 ## Documentation
 
-For detailed documentation, see the [docs](docs/) directory or the [Documentation Index](docs/index.md).
+For detailed documentation, see the [docs](docs/) directory.
 
 ## Contributing
 
