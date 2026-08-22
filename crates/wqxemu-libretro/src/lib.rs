@@ -372,6 +372,10 @@ pub extern "C" fn retro_get_system_info(info: *mut RetroSystemInfo) {
 #[no_mangle]
 pub extern "C" fn retro_get_system_av_info(info: *mut RetroSystemAvInfo) {
     unsafe {
+        let fps = EMULATOR
+            .as_ref()
+            .map(|emulator| emulator.frame_rate() as f64)
+            .unwrap_or(30.0);
         (*info) = RetroSystemAvInfo {
             geometry: RetroGameGeometry {
                 base_width: LCD_WIDTH as u32,
@@ -381,7 +385,7 @@ pub extern "C" fn retro_get_system_av_info(info: *mut RetroSystemAvInfo) {
                 aspect_ratio: LCD_WIDTH as f32 / LCD_HEIGHT as f32,
             },
             timing: RetroSystemTiming {
-                fps: 30.0,
+                fps,
                 sample_rate: 44100.0,
             },
         };

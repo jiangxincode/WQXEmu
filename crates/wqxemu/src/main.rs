@@ -543,8 +543,7 @@ fn main() -> Result<()> {
     )
     .expect("Failed to create window");
 
-    // Limit to ~30 fps
-    window.set_target_fps(30);
+    window.set_target_fps(emu.frame_rate() as usize);
 
     // Main event loop
     let layout = layout_for(model);

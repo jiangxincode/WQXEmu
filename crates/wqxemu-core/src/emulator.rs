@@ -10,7 +10,7 @@ use anyhow::{Context, Result};
 
 use crate::audio::SAMPLE_RATE;
 use crate::cpu::{Cpu, RESET_VECTOR};
-use crate::lcd::{CYCLES_PER_FRAME, LCD_HEIGHT, LCD_WIDTH};
+use crate::lcd::{LCD_HEIGHT, LCD_WIDTH};
 use crate::machine::{Machine, MachineModel, RomFiles};
 use crate::machines;
 use crate::save::{PersistentState, SaveState, PERSISTENT_STATE_VERSION};
@@ -94,17 +94,9 @@ impl Emulator {
         self.machine.set_speed_up(speed_up);
     }
 
-    /// Run one frame (approximately 1/30 second).
+    /// Run one machine video frame.
     pub fn run_frame(&mut self) {
-        let target_cycles = CYCLES_PER_FRAME;
-        let mut cycles_this_frame = 0u64;
-
-        while cycles_this_frame < target_cycles {
-            let cycles = self.machine.step(&mut self.cpu);
-            cycles_this_frame += cycles;
-        }
-
-        self.machine.end_of_frame(&mut self.cpu);
+        self.machine.run_frame(&mut self.cpu);
         self.frame_count += 1;
     }
 
@@ -146,6 +138,11 @@ impl Emulator {
     /// Get the sample rate for audio.
     pub fn sample_rate(&self) -> u32 {
         SAMPLE_RATE
+    }
+
+    /// Get the machine's host video refresh rate.
+    pub fn frame_rate(&self) -> u32 {
+        self.machine.frame_rate()
     }
 
     /// Drain audio samples.

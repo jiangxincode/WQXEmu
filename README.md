@@ -54,7 +54,8 @@ cargo run --release -- --model pc1000 roms/pc1000.rom -n roms/pc1000.nor
 # CC800 (16MB ROM: obj.bin, plus 512KB NOR)
 cargo run --release -- --model cc800 roms/cc800/obj.bin -n roms/cc800/cc800.fls
 
-# NC3000 boots from NOR + NAND (1MB NOR + ~66MB NAND)
+# NC3000 boots from NOR + NAND (1MB NOR + ~66MB NAND).
+# If NAND0 is omitted, the required first-plane marker is initialized in memory.
 cargo run --release -- --model nc3000 -n roms/nc3000/nc3000.nor --nand-path roms/nc3000/nc3000.nand
 
 # Run headless for 300 frames and save a screenshot to the given path

@@ -51,8 +51,8 @@ To keep the frontends model-agnostic, the core is split into:
 pub struct RomFiles {
     pub rom: Option<PathBuf>,   // NC1020/PC1000 system ROM
     pub nor: Option<PathBuf>,   // NOR Flash dump
-    pub nand: Option<PathBuf>,  // NC2000 NAND dump
-    pub nand0: Option<PathBuf>, // NC2000 first NAND plane
+    pub nand: Option<PathBuf>,  // NC2000/NC3000 NAND dump
+    pub nand0: Option<PathBuf>, // NC2000/NC3000 first NAND plane
 }
 ```
 
@@ -143,8 +143,13 @@ pub struct RomFiles {
 
 - The NC3000 is the faster sibling of the NC2000 (10.24 MHz CPU) and
   shares its NOR + NAND boot model. The NOR is 1MB (32 x 32KB banks) and
-  the NAND covers two planes (~66MB plus an optional 64-page first plane
-  dump that is left erased when absent).
+  the NAND covers two planes (~66MB plus an optional 64-page first-plane
+  dump). The main NAND follows those 64 pages; when `nand0` is absent, the
+  emulator initializes the NC3000 marker required by the firmware.
+- NC3000 overrides the generic frame loop with its native 64 Hz schedule. Each
+  frame runs 1202 CPU slices of 128 cycles and places the four 256 Hz timebase
+  interrupts at fixed slice boundaries. The RTC subsecond register is derived
+  from the current frame and slice, with 2 Hz IRQ/NMI events at phases 0 and 32.
 - Memory map: 0x2000-0x3FFF is always RAM (no RAMB); banks 0x00-0x1F
   select NOR pages; banks 0x80+ are invalid (no extended RAM). Bank 0/1
   with ROA set map the whole 0x4000-0xBFFF window onto internal RAM
@@ -161,10 +166,20 @@ pub struct RomFiles {
   are shared with the NC2000.
 - The one-bit LCD framebuffer is read from its fixed internal RAM window at
   0x19C0; the register-derived address is not used as the host buffer start.
-- Standby/wake: the firmware switches the clock off (CKS=7) to enter
-  standby; pressing the power key at matrix (0,0) triggers a warm reset.
-- Verified with the official NC3000 firmware: cold boot draws the clock
-  screen, then enters standby and wakes on the power key.
+- Standby/wake: the emulated 256 Hz RTC advances the firmware-visible `TR_MS`
+  register. The firmware inactivity counter is reset at frame phase zero once
+  per second, while an explicit ON/OFF press can still switch the clock off
+  (CKS=7). The frontend's logical power key (0,0) triggers a warm reset and is
+  translated to the NC3000 hardware scan position (4,0), allowing the firmware
+  to observe the held key during startup.
+- RTC/UART register 0x3D exposes the prioritized 2 Hz, sample, and alarm
+  interrupt vectors. RCR1 writes clear the selected vectors instead of leaving
+  a permanently pending IRQ.
+- The one-bit LCD framebuffer is published after every completed machine frame,
+  matching the native display loop without cross-frame sampling or blending.
+- Verified with the official NC3000 firmware: both first-boot choices remain
+  visible without frame alternation, and an explicit ON/OFF power cycle wakes
+  to a persistently visible screen.
 
 ### NC2000
 
@@ -213,9 +228,9 @@ pub struct Emulator {
 
 `Emulator::new(model, &files)` instantiates the machine, loads its ROMs
 and initializes the CPU from the machine's reset vector. `from_rom` is
-kept as a convenience for the NC1020 case. The frame loop calls
-`machine.step()` until `CYCLES_PER_FRAME` and then
-`machine.end_of_frame()`.
+kept as a convenience for the NC1020 case. The frame loop calls the machine's
+`run_frame()` implementation; the default uses `cycles_per_frame()`, while
+models with hardware-specific scheduling can override the whole frame.
 
 The standalone frontend's optional `--state-file` path stores a gzip-compressed,
 versioned persistent session. The envelope binds the session to its hardware

@@ -58,8 +58,8 @@ impl MachineModel {
 ///
 /// - `rom`: system ROM dump (NC1020 `obj_lu.bin` / `.rom`, PC1000 `.rom`)
 /// - `nor`: NOR Flash dump (`.fls` / `.nor`)
-/// - `nand`: NAND Flash dump (NC2000 `.nand`)
-/// - `nand0`: first NAND plane (NC2000 `.nand0`, optional)
+/// - `nand`: NAND Flash dump (NC2000/NC3000 `.nand`)
+/// - `nand0`: first NAND plane (NC2000/NC3000 `.nand0`, optional)
 #[derive(Clone, Debug, Default)]
 pub struct RomFiles {
     pub rom: Option<PathBuf>,
@@ -109,6 +109,26 @@ pub trait Machine: Send {
 
     /// Execute one CPU instruction. Returns the number of cycles consumed.
     fn step(&mut self, cpu: &mut Cpu) -> u64;
+
+    /// CPU cycles executed for one host video frame.
+    fn cycles_per_frame(&self) -> u64 {
+        crate::lcd::CYCLES_PER_FRAME
+    }
+
+    /// Host video refresh rate for this machine.
+    fn frame_rate(&self) -> u32 {
+        crate::lcd::FRAME_RATE
+    }
+
+    /// Execute one video frame.
+    fn run_frame(&mut self, cpu: &mut Cpu) {
+        let target_cycles = self.cycles_per_frame();
+        let mut cycles_this_frame = 0u64;
+        while cycles_this_frame < target_cycles {
+            cycles_this_frame += self.step(cpu);
+        }
+        self.end_of_frame(cpu);
+    }
 
     /// Called once per frame after the CPU has run. Machines update their
     /// LCD framebuffer and handle wake-up here.
