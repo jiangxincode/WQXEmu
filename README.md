@@ -1,4 +1,8 @@
-# WQXEmu —— Wenquxing NC1020 Emulator
+# WQXEmu — Wenquxing Emulator
+
+<p align="center">
+  <img src="res/logo-banner.png" alt="WQXEmu" width="600">
+</p>
 
 <p align="center">
   <a href="https://AloysHF.github.io/WQXEmu/"><img src="https://img.shields.io/badge/Website-WQXEmu-E8553A?logo=githubpages&logoColor=white" alt="Website"></a>
@@ -7,17 +11,11 @@
   <a href="https://github.com/AloysHF/WQXEmu/releases"><img src="https://img.shields.io/github/downloads/AloysHF/WQXEmu/total" alt="Downloads"></a>
   <a href="https://sonarcloud.io/dashboard?id=AloysHF_WQXEmu"><img src="https://sonarcloud.io/api/project_badges/measure?project=AloysHF_WQXEmu&metric=alert_status" alt="Quality Gate Status"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPLv3%2B-blue.svg" alt="License: GPLv3 or later"></a>
+  <a href="https://discord.gg/7XDdSrYD"><img src="https://img.shields.io/badge/Discord-Join%20Us-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
+  <a href="https://qm.qq.com/q/LAO7DKAWUC"><img src="https://img.shields.io/badge/QQ%E7%BE%A4-Join%20Us-12B7F5?logo=tencent-qq&logoColor=white" alt="QQ Group"></a>
 </p>
 
-文曲星电子辞典模拟器，使用 Rust 编写，采用低级模拟 (LLE) 方式运行真实固件。目前支持 NC1020、PC1000、CC800、NC2000 和 NC3000。
-
-A Wenquxing electronic dictionary emulator written in Rust, using Low-Level Emulation (LLE) to run real firmware. NC1020, PC1000, CC800, NC2000 and NC3000 are all supported.
-
-## Status
-
-> **Under development.** Core emulation is functional but the project is still a work in progress.
-
-> **开发中。** 核心模拟功能已可用，但项目仍在积极开发中。
+A Wenquxing (文曲星) electronic dictionary emulator written in Rust, using Low-Level Emulation (LLE) to run real firmware. Supports NC1020, PC1000, CC800, NC2000, and NC3000 models.
 
 ## Features
 
@@ -26,21 +24,24 @@ A Wenquxing electronic dictionary emulator written in Rust, using Low-Level Emul
 - **Multi-model architecture** — shared `Machine` trait with NC1020 / PC1000 / CC800 / NC2000 / NC3000 backends (PC1000 and CC800 boot to the main menu; NC2000/NC3000 boot to the clock screen with standby/wake)
 - **LCD display** — 160×80 pixel display with model-correct framebuffer placement, 4 grayscale levels, and ghosting effects
 - **Keyboard input** — complete QWERTY keyboard matrix emulation
-- **Device skins and virtual keypad** — the desktop frontend embeds the
-  live LCD in a model-specific device image; the pictured keys can be
-  clicked with the mouse or pressed on the PC keyboard, and pressed keys
-  are highlighted
+- **Device skins and virtual keypad** — the desktop frontend embeds the live LCD in a model-specific device image; the pictured keys can be clicked with the mouse or pressed on the PC keyboard, and pressed keys are highlighted
 - **Audio system** — SPDS104A DSP emulation with tone generation
 - **Timer system** — multiple timer sources with interrupt generation
 - **Persistent sessions** — optional compressed state files resume any supported model without modifying source dumps
 - **RetroArch integration** — libretro core for use with RetroArch frontend
 - **Cross-platform** — Windows, macOS, Linux, Android, iOS, and webOS
 
-## Quick Start
+## Usage
 
-Firmware dumps are passed with options named after the storage device:
-`--rom`, `--nor`, `--nand`, and `--nand0`. The required combination depends
-on the selected model.
+### Standalone Mode
+
+Download the latest binary from the [Releases](https://github.com/AloysHF/WQXEmu/releases) page and run:
+
+```bash
+wqxemu --model nc1020 --rom roms/nc1020/obj_lu.bin --nor roms/nc1020/nc1020.fls
+```
+
+Firmware dumps are passed with options named after the storage device: `--rom`, `--nor`, `--nand`, and `--nand0`. The required combination depends on the selected model.
 
 | Model | Required firmware | Optional firmware |
 |-------|-------------------|-------------------|
@@ -50,60 +51,28 @@ on the selected model.
 | NC2000 | NOR + NAND + NAND0 | — |
 | NC3000 | NOR + NAND | NAND0 |
 
-```bash
-# The commands below assume a roms/ directory at the repository root
-# (the test dumps are already there locally; ROMs are not distributed):
+See the [Standalone Emulator](docs/Standalone-Emulator.md) guide for installation, keyboard controls, headless mode, screenshots, and all command-line options.
 
-# NC1020 (24MB ROM + 1MB NOR)
-cargo run --release -- --model nc1020 --rom roms/nc1020/obj_lu.bin --nor roms/nc1020/nc1020.fls
+### RetroArch Mode
 
-# NC2000 boots from NOR + NAND (the first-plane dump is required).
-cargo run --release -- --model nc2000 --nor roms/nc2000/nc2000.nor --nand roms/nc2000/nc2000.nand --nand0 roms/nc2000/nc2000.nand0
+Install the core and load a game through RetroArch's **Load Content** menu.
 
-# PC1000 (12MB ROM: obj1 + obj2 + obj3, plus 512KB NOR)
-cargo run --release -- --model pc1000 --rom roms/pc1000/pc1000.rom --nor roms/pc1000/pc1000.fls
-
-# CC800 (16MB ROM: obj.bin, plus 512KB NOR)
-cargo run --release -- --model cc800 --rom roms/cc800/obj.bin --nor roms/cc800/cc800.fls
-
-# NC3000 boots from NOR + NAND (1MB NOR + ~66MB NAND).
-# If NAND0 is omitted, the required first-plane marker is initialized in memory.
-cargo run --release -- --model nc3000 --nor roms/nc3000/nc3000.nor --nand roms/nc3000/nc3000.nand
-
-# Run headless for 300 frames and save a screenshot to the given path
-cargo run --release -- --model nc1020 --rom roms/nc1020/obj_lu.bin --nor roms/nc1020/nc1020.fls --screenshot screenshot.png --screenshot-frames 300
-
-# Build the libretro core for RetroArch
-cargo build -p wqxemu-libretro --release
-```
-
-ROM dumps are not distributed with the repository (the local `roms/`
-directory is git-ignored); prepare your own dumps using the layout above.
-`--state-file PATH` works with every supported model. If the file exists, the
-desktop frontend restores it after loading the configured dumps; on a normal
-exit it atomically replaces only that compressed state file. ROM, NOR, NAND,
-and NAND0 source dumps remain read-only. Use a separate state file for each
-machine and firmware configuration; states from another model are rejected.
-
-```bash
-# Pass --state-file on the first run to create a compressed session state on exit.
-# Reuse the same state file on later runs to skip first-boot recovery.
-cargo run --release -- --model nc2000 --nor roms/nc2000/nc2000.nor --nand roms/nc2000/nc2000.nand --nand0 roms/nc2000/nc2000.nand0 --state-file nc2000.wqxs
-```
+See the [RetroArch Core](docs/RetroArch-Core.md) guide for installation, supported platforms, RetroPad mapping, and features.
 
 ## Building
 
-### Prerequisites
+Requires [Rust](https://www.rust-lang.org/tools/install) (stable).
 
-- Rust 1.70+ (install via [rustup](https://rustup.rs/))
-
-### Desktop
+### Standalone Mode (Default)
 
 ```bash
 cargo build --release
+cargo run --release -- --model nc1020 --rom roms/nc1020/obj_lu.bin --nor roms/nc1020/nc1020.fls
 ```
 
-### RetroArch Core
+The binary is produced at `target/release/wqxemu` (or `wqxemu.exe` on Windows).
+
+### Libretro Core (for RetroArch)
 
 ```bash
 cargo build -p wqxemu-libretro --release
@@ -111,17 +80,83 @@ cargo build -p wqxemu-libretro --release
 
 The compiled core (`wqxemu_libretro.dll` / `libwqxemu_libretro.so` / `libwqxemu_libretro.dylib`) can be loaded in RetroArch.
 
+For Android cross-compilation, see [Android Libretro Core](docs/Android-Libretro-Core.md).
+For iOS, see [iOS Libretro Core](docs/iOS-Libretro-Core.md).
+
+## Testing
+
+Run the unit tests:
+
+```bash
+cargo test --workspace
+```
+
+There is also a smoke test that loads every available game, runs it for a number of frames, and checks that the emulator neither panics nor produces a blank frame. It needs the (non-distributed) game assets, so it is `#[ignore]`d by default and only runs on demand:
+
+```bash
+# Uses <repo>/tmp/games by default, or set WQX_GAME_DIR
+cargo test -p wqxemu-core --test smoke -- --ignored --nocapture
+```
+
 ## Architecture
 
-| Component | Specification |
-|-----------|---------------|
-| **CPU** | 6502/W65C02 @ 5 MHz (SPDC1024 SoC) |
-| **RAM** | 24K internal + 32K external + 4K SPR4096 |
-| **NOR Flash** | 512K × 8-bit (SPR4096) |
-| **NAND Flash** | 32M × 8-bit |
-| **Display** | 160×80 LCD, 4 grayscale levels |
-| **Audio** | SPDS104A DSP |
-| **Input** | QWERTY keyboard matrix |
+```
+crates/
+├── wqxemu-core/               # Platform-independent emulator engine (library)
+│   └── src/
+│       ├── lib.rs             # Crate root
+│       ├── emulator.rs        # Main emulator orchestrator
+│       ├── cpu.rs             # 6502/W65C02 CPU emulation
+│       ├── memory.rs          # Memory bus with bank switching
+│       ├── lcd.rs             # LCD framebuffer (160×80, 4 grayscale)
+│       ├── input.rs           # Keyboard input handling
+│       ├── audio.rs           # Audio tone generation
+│       ├── timer.rs           # Timer system with interrupts
+│       ├── flash.rs           # NOR/NAND flash controller
+│       ├── io.rs              # IO register handling
+│       ├── save.rs            # Save state serialization
+│       └── machines/          # Per-model implementations
+│           ├── nc1020.rs      # NC1020 model
+│           ├── pc1000.rs      # PC1000 model
+│           ├── cc800.rs       # CC800 model
+│           ├── nc2000.rs      # NC2000 model
+│           └── nc3000.rs      # NC3000 model
+├── wqxemu/                    # Standalone binary (→ wqxemu)
+│   └── src/
+│       └── main.rs            # Window loop and CLI frontend
+└── wqxemu-libretro/           # libretro cdylib (→ wqxemu_libretro.{dll,so,dylib})
+    └── src/
+        └── lib.rs             # libretro API implementation
+```
+
+For detailed architecture information, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Compatibility
+
+| Model | Status | Screenshot | Notes |
+|-------|--------|------------|-------|
+| NC1020 | ✅ Working | <img src="res/NC1020.png" width="120"> | Boots to menu, keyboard and NOR work |
+| PC1000 | ✅ Working | <img src="res/PC1000.png" width="120"> | Boots to menu, keyboard and NOR work |
+| CC800 | ✅ Working | <img src="res/CC800.png" width="120"> | Boots to menu, keyboard and NOR work |
+| NC2000 | ✅ Working | <img src="res/NC2000.png" width="120"> | Boots to clock screen, standby/wake works |
+| NC3000 | ✅ Working | <img src="res/NC3000.png" width="120"> | Boots to clock screen, standby/wake works |
+
+| Status | Description |
+|--------|-------------|
+| ✅ Working | Model boots and runs correctly |
+| ⚠️ Partial | Model boots but has issues |
+| ❌ Not Working | Model does not boot or crashes |
+
+## Contributing
+
+Contributions are welcome! Whether you're interested in fixing bugs, adding features, improving documentation, or testing game compatibility, we'd love your help. See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for details.
+
+## Acknowledgments
+
+- [wangyu-/NC2000](https://github.com/wangyu-/NC2000) — NC2000/NC2600/NC1020 emulator
+- [Wang-Yue/NC1020](https://github.com/Wang-Yue/NC1020) — NC1020 emulator
+- [hackwaly/jswqx](https://github.com/hackwaly/jswqx) — JavaScript NC1020 emulator
+- [banxian/Sim800](https://github.com/banxian/Sim800) — CC800/PC1000 emulator
 
 ## License
 
