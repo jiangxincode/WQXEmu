@@ -145,8 +145,7 @@ Game resources can be downloaded from [Baidu Netdisk](https://pan.baidu.com/s/xx
 
 For detailed game list with screenshots and compatibility status, see:
 - [Game Compatibility](docs/GAME-COMPATIBILITY.md) — Game compatibility status
-- [CLI Options](docs/CLI-Options.md) — Command-line options reference
-- [Standalone Emulator](docs/Standalone-Emulator.md) — Standalone emulator guide
+- [Standalone Emulator](docs/Standalone-Emulator.md) — Standalone emulator guide with all command-line options
 - [RetroArch Core](docs/RetroArch-Core.md) — RetroArch integration guide
 
 ## Documentation
