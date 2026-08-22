@@ -61,7 +61,7 @@ cargo run --release -- --model nc1020 --rom roms/nc1020/obj_lu.bin --nor roms/nc
 cargo run --release -- --model nc2000 --nor roms/nc2000/nc2000.nor --nand roms/nc2000/nc2000.nand --nand0 roms/nc2000/nc2000.nand0
 
 # PC1000 (12MB ROM: obj1 + obj2 + obj3, plus 512KB NOR)
-cargo run --release -- --model pc1000 --rom roms/pc1000.rom --nor roms/pc1000.nor
+cargo run --release -- --model pc1000 --rom roms/pc1000/pc1000.rom --nor roms/pc1000/pc1000.fls
 
 # CC800 (16MB ROM: obj.bin, plus 512KB NOR)
 cargo run --release -- --model cc800 --rom roms/cc800/obj.bin --nor roms/cc800/cc800.fls
