@@ -782,14 +782,6 @@ impl Nc3000Machine {
                 (self.r08_port0_id & 0x0C) >> 2
             }
             io_reg::PORT4 => self.io[addr as usize],
-            io_reg::BATTERY => {
-                let level = self.io[addr as usize] & 0x1F;
-                if level >= 11 {
-                    self.io[addr as usize] | 0x20
-                } else {
-                    self.io[addr as usize] & !0x20
-                }
-            }
             io_reg::DSP_STAT => self.dsp_stat(),
             io_reg::DSP_RET_DATA => {
                 if self.dsp_ret_data == -1 {
@@ -1835,6 +1827,42 @@ mod tests {
         assert!(machine.rw0f_b5_dir01);
         assert!(machine.rw0f_b6_dir023);
         assert!(machine.rw0f_b7_dir047);
+    }
+
+    #[test]
+    fn battery_read_preserves_firmware_status_bit() {
+        let mut machine = empty_machine();
+
+        machine.io_write(io_reg::BATTERY as u8, 0xAA);
+
+        assert_eq!(machine.io_read(io_reg::BATTERY as u8), 0xAA);
+    }
+
+    #[test]
+    fn dictionary_hotkey_keeps_screen_visible() {
+        let Some(files) = nc3000_rom_files() else {
+            return;
+        };
+        let mut machine = Nc3000Machine::new(&files).unwrap();
+        machine.reset();
+        let mut cpu = Cpu::new();
+        cpu.reset(machine.peek_u16(crate::cpu::RESET_VECTOR));
+
+        preserve_nand_at_first_boot(&mut machine, &mut cpu);
+        for _ in 0..256 {
+            run_frame(&mut machine, &mut cpu);
+        }
+        machine.set_key(5 << 3, true);
+        for _ in 0..7 {
+            run_frame(&mut machine, &mut cpu);
+        }
+        machine.set_key(5 << 3, false);
+
+        let (min_nonzero, _) = measure_sustained_screen(&mut machine, &mut cpu);
+        assert!(
+            min_nonzero > 50,
+            "dictionary hotkey triggered a low-battery shutdown"
+        );
     }
 
     #[test]

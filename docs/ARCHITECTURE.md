@@ -161,7 +161,8 @@ pub struct RomFiles {
 - IO follows the SPDC1016 model shared with the NC2000, with two
   differences: the NAND data register is 0x39 (not 0x29) and the NAND
   control bits in port 4 are CLE=bit5, ALE=bit4, CE=bit2. The keypad has
-  a port-6 extension at 0x1E.
+  a port-6 extension at 0x1E. Battery register 0x1C is a plain read/write
+  latch on the NC3000 and preserves the firmware-provided status bits.
 - NOR block erase is 4KB. NAND commands (read/program/erase/status/ID)
   are shared with the NC2000.
 - The one-bit LCD framebuffer is read from its fixed internal RAM window at
