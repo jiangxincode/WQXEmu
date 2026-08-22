@@ -129,11 +129,11 @@ For detailed architecture information, see [ARCHITECTURE.md](docs/ARCHITECTURE.m
 
 | Model | Status | Screenshot | Notes |
 |-------|--------|------------|-------|
-| NC1020 | ✅ Working | ![NC1020](res/NC1020.png) | Boots to menu, keyboard and NOR work |
-| PC1000 | ✅ Working | ![PC1000](res/PC1000.png) | Boots to menu, keyboard and NOR work |
-| CC800 | ✅ Working | ![CC800](res/CC800.png) | Boots to menu, keyboard and NOR work |
-| NC2000 | ✅ Working | ![NC2000](res/NC2000.png) | Boots to clock screen, standby/wake works |
-| NC3000 | ✅ Working | ![NC3000](res/NC3000.png) | Boots to clock screen, standby/wake works |
+| NC1020 | ✅ Working | <img src="res/NC1020.png" width="120"> | Boots to menu, keyboard and NOR work |
+| PC1000 | ✅ Working | <img src="res/PC1000.png" width="120"> | Boots to menu, keyboard and NOR work |
+| CC800 | ✅ Working | <img src="res/CC800.png" width="120"> | Boots to menu, keyboard and NOR work |
+| NC2000 | ✅ Working | <img src="res/NC2000.png" width="120"> | Boots to clock screen, standby/wake works |
+| NC3000 | ✅ Working | <img src="res/NC3000.png" width="120"> | Boots to clock screen, standby/wake works |
 
 | Status | Description |
 |--------|-------------|
