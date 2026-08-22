@@ -11,6 +11,8 @@
   <a href="https://github.com/AloysHF/WQXEmu/releases"><img src="https://img.shields.io/github/downloads/AloysHF/WQXEmu/total" alt="Downloads"></a>
   <a href="https://sonarcloud.io/dashboard?id=AloysHF_WQXEmu"><img src="https://sonarcloud.io/api/project_badges/measure?project=AloysHF_WQXEmu&metric=alert_status" alt="Quality Gate Status"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPLv3%2B-blue.svg" alt="License: GPLv3 or later"></a>
+  <a href="https://discord.gg/7XDdSrYD"><img src="https://img.shields.io/badge/Discord-Join%20Us-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
+  <a href="https://qm.qq.com/q/LAO7DKAWUC"><img src="https://img.shields.io/badge/QQ%E7%BE%A4-Join%20Us-12B7F5?logo=tencent-qq&logoColor=white" alt="QQ Group"></a>
 </p>
 
 A Wenquxing (文曲星) electronic dictionary emulator written in Rust, using Low-Level Emulation (LLE) to run real firmware. Supports NC1020, PC1000, CC800, NC2000, and NC3000 models.
