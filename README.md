@@ -125,12 +125,17 @@ crates/
 
 For detailed architecture information, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Game Compatibility
+## Compatibility
 
-For detailed game list with screenshots and compatibility status, see:
-- [Game Compatibility](docs/GAME-COMPATIBILITY.md) — Game compatibility status
-- [Standalone Emulator](docs/Standalone-Emulator.md) — Standalone emulator guide with all command-line options
-- [RetroArch Core](docs/RetroArch-Core.md) — RetroArch integration guide
+For detailed model compatibility status with screenshots, see [COMPATIBILITY.md](docs/COMPATIBILITY.md).
+
+| Model | Status | Notes |
+|-------|--------|-------|
+| NC1020 | ✅ Working | Boots to menu, keyboard and NOR work |
+| PC1000 | ✅ Working | Boots to menu, keyboard and NOR work |
+| CC800 | ✅ Working | Boots to menu, keyboard and NOR work |
+| NC2000 | ✅ Working | Boots to clock screen, standby/wake works |
+| NC3000 | ✅ Working | Boots to clock screen, standby/wake works |
 
 ## Contributing
 
