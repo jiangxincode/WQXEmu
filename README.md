@@ -1,4 +1,4 @@
-# WQXEmu — Wenquxing NC1020 Emulator
+# WQXEmu — Wenquxing Emulator
 
 <p align="center">
   <a href="https://AloysHF.github.io/WQXEmu/"><img src="https://img.shields.io/badge/Website-WQXEmu-E8553A?logo=githubpages&logoColor=white" alt="Website"></a>
@@ -125,29 +125,12 @@ crates/
 
 For detailed architecture information, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Key Mappings (Standalone)
-
-| Key | Action |
-|-----|--------|
-| Arrow Up/Down/Left/Right | Navigate |
-| Enter | Confirm |
-| Escape | Back / Cancel |
-| F5 | Save state |
-| F8 | Load state |
-| F12 | Screenshot |
-
 ## Game Compatibility
-
-Game resources can be downloaded from [Baidu Netdisk](https://pan.baidu.com/s/xxx?pwd=xxx).
 
 For detailed game list with screenshots and compatibility status, see:
 - [Game Compatibility](docs/GAME-COMPATIBILITY.md) — Game compatibility status
 - [Standalone Emulator](docs/Standalone-Emulator.md) — Standalone emulator guide with all command-line options
 - [RetroArch Core](docs/RetroArch-Core.md) — RetroArch integration guide
-
-## Documentation
-
-For detailed documentation, see the [docs](docs/) directory.
 
 ## Contributing
 
