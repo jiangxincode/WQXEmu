@@ -1,0 +1,32 @@
+# Software Information
+display_name = "Wenquxing (WQXEmu)"
+authors = "Aloys"
+supported_extensions = "bin|fls|rom|nor|nand|nand0"
+corename = "wqxemu"
+categories = "Emulator"
+license = "GPL-3.0-or-later"
+permissions = ""
+display_version = "0.1.0"
+
+# Hardware Information
+manufacturer = "Wenquxing"
+systemname = "Wenquxing"
+systemid = "wenquxing"
+
+# Libretro Features
+database = "Wenquxing"
+supports_no_game = "false"
+firmware_count = 0
+savestate = "true"
+cheats = "false"
+input_descriptors = "true"
+memory_descriptors = "false"
+libretro_saves = "false"
+core_options = "true"
+load_subsystem = "false"
+hw_render = "false"
+needs_fullpath = "true"
+disk_control = "false"
+is_experimental = "false"
+
+description = "WQXEmu is an emulator for Wenquxing (文曲星) electronic dictionaries. This libretro core supports NC1020, PC1000, CC800, NC2000, and NC3000 models. Firmware files are required: ROM (.bin, .rom), NOR (.fls, .nor), and NAND (.nand, .nand0) dumps from the original hardware."

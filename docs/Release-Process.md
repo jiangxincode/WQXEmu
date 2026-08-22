@@ -11,14 +11,17 @@ This document describes how to publish a new release of WQXEmu.
 
 ### 1. Update version numbers
 
-Version numbers must be updated in **two files**:
+Version numbers must be updated in **three files**:
 
 | File | Field | Current |
 |------|-------|---------|
 | `Cargo.toml` (workspace root) | `[workspace.package] version` | `"0.1.0"` |
 | `crates/wqxemu-libretro/src/lib.rs` | `library_version` | `"0.1.0"` |
+| `crates/wqxemu-libretro/wqxemu_libretro.info` | `display_version` | `"0.1.0"` |
 
-Both values must match. The `library_version` in `lib.rs` is used by RetroArch to display the core version to users.
+All values must match. The `.info` file is copied directly into the release
+artifacts — RetroArch reads `display_version` to display the core version to
+users.
 
 ```bash
 # Example: bumping to 0.2.0
@@ -28,12 +31,16 @@ sed -i 's/^version = "0.1.0"/version = "0.2.0"/' Cargo.toml
 # 2. Edit lib.rs
 sed -i 's/library_version: c"0.1.0"/library_version: c"0.2.0"/' \
   crates/wqxemu-libretro/src/lib.rs
+
+# 3. Edit .info file
+sed -i 's/^display_version = "0.1.0"/display_version = "0.2.0"/' \
+  crates/wqxemu-libretro/wqxemu_libretro.info
 ```
 
 ### 2. Commit the version bump
 
 ```bash
-git add Cargo.toml Cargo.lock crates/wqxemu-libretro/src/lib.rs
+git add Cargo.toml Cargo.lock crates/wqxemu-libretro/src/lib.rs crates/wqxemu-libretro/wqxemu_libretro.info
 git commit -m "chore: bump version to 0.2.0"
 git push origin master
 ```
@@ -53,7 +60,7 @@ Pushing the tag triggers `.github/workflows/release.yml`, which:
 
 1. **Builds standalone binaries** for Linux, macOS (x86_64 + aarch64), and Windows
 2. **Builds libretro cores** for the same platforms, renaming the cdylib to
-   `wqxemu_libretro.<ext>`
+   `wqxemu_libretro.<ext>` and bundling `wqxemu_libretro.info`
 3. **Builds the Android libretro core** for `arm64-v8a`, `armeabi-v7a`, `x86`,
    `x86_64`, packaged as `wqxemu-android-libretro.tar.gz`
 4. **Creates a draft GitHub Release** with:
@@ -122,5 +129,6 @@ re-pushing the tag, otherwise the new run may conflict with the existing draft.
 
 ### Version mismatch in RetroArch
 
-- Ensure both `Cargo.toml` and `lib.rs` have the same version string
-- The `library_version` in `lib.rs` is used by RetroArch to display the core version
+- Ensure both `Cargo.toml`, `lib.rs`, and `wqxemu_libretro.info` have the same
+  version string
+- The `.info` file is bundled as-is into the release artifacts
