@@ -35,7 +35,11 @@ const NOR_PAGE_SIZE: usize = 0x8000;
 const INTERNAL_RAM_SIZE: usize = 0x6000;
 const AUTO_SLEEP_COUNTER_ADDR: usize = 0x0401;
 const CPU_FREQ: u32 = 10_240_000;
-const CYCLES_PER_FRAME: u64 = CPU_FREQ as u64 / crate::lcd::FRAME_RATE as u64;
+const FRAME_RATE: u32 = 64;
+const TIMER_CYCLES_PER_FRAME: u64 = CPU_FREQ as u64 / FRAME_RATE as u64;
+const CPU_SLICES_PER_FRAME: u64 = 1_202;
+const CPU_CYCLES_LOW_SPEED: u64 = CPU_SLICES_PER_FRAME * 192;
+const CPU_CYCLES_HIGH_SPEED: u64 = CPU_SLICES_PER_FRAME * 1_536;
 /// Fixed start of the one-bit LCD framebuffer in internal RAM.
 const LCD_BUFFER_ADDR: usize = 0x19C0;
 
@@ -175,10 +179,14 @@ pub struct Nc3000Machine {
 
     // RTC / interrupt vectors
     rtc_256_counter: u8,
+    #[serde(skip)]
+    lcd_sample_phase: u8,
     iv_queue: Vec<u8>,
     tb_cycles: u64,
     rtc_cycles: u64,
     do_warm_reset: bool,
+    #[serde(skip)]
+    power_off_requested: bool,
 
     audio: Audio,
     cycles: u64,
@@ -235,10 +243,12 @@ impl Nc3000Machine {
             lcd_buff_addr: 0,
             lcd_buff_addr_mask: 0x3FFF,
             rtc_256_counter: 0,
+            lcd_sample_phase: 0,
             iv_queue: Vec::new(),
             tb_cycles: 0,
             rtc_cycles: 0,
             do_warm_reset: false,
+            power_off_requested: false,
             audio: Audio::new(),
             cycles: 0,
         };
@@ -1204,16 +1214,16 @@ impl Nc3000Machine {
     }
 
     /// Clock is switched off when io[0x05] CKS bits (5..7) == 7.
-    /// The firmware writes 0xFF here to enter standby; the CPU is then
-    /// suspended until a key wakes the device (warm reset).
     fn is_clk_off(&self) -> bool {
         self.io[io_reg::CLOCK_CTRL] >> 5 == 7
     }
 
-    /// Wake the device from standby: restore the clock and reset the CPU.
+    /// Wake the device from standby and reset the CPU.
     fn warm_reset(&mut self, cpu: &mut Cpu) {
-        self.io[io_reg::CLOCK_CTRL] &= 0x1F;
+        self.io[io_reg::TIMER0_VAL] = 1;
+        self.io[io_reg::TIMER1_VAL] |= 1;
         self.do_warm_reset = false;
+        self.power_off_requested = false;
         cpu.reset(self.peek_u16(crate::cpu::RESET_VECTOR));
         log::info!("NC3000 warm reset (wake from standby)");
     }
@@ -1284,17 +1294,6 @@ impl Nc3000Machine {
             }
         }
 
-        // Timebase ~185 Hz
-        self.tb_cycles += delta as u64;
-        let tb_cycles = (CPU_FREQ / 185) as u64;
-        while self.tb_cycles >= tb_cycles {
-            self.tb_cycles -= tb_cycles;
-            if self.time_base_enable() {
-                self.io[io_reg::INT_STATUS] |= 0x08;
-                cpu.irq_pending = true;
-            }
-        }
-
         // RTC 256 Hz
         self.rtc_cycles += delta as u64;
         let rtc_cycles = (CPU_FREQ / 256) as u64;
@@ -1303,11 +1302,6 @@ impl Nc3000Machine {
             self.ext_reg[ext_reg::TR_MS] = self.ext_reg[ext_reg::TR_MS].wrapping_add(1);
             let cnt = self.ext_reg[ext_reg::TR_MS];
             self.rtc_256_counter = cnt;
-            if cnt.is_multiple_of(64) {
-                // Prevent the firmware's inactivity timer from immediately
-                // returning the desktop emulator to standby after startup.
-                self.ram[AUTO_SLEEP_COUNTER_ADDR] = 0;
-            }
             if cnt == 0 {
                 self.bump_rtc();
             }
@@ -1355,8 +1349,10 @@ impl Nc3000Machine {
         self.lcd_buff_addr = 0;
         self.lcd_buff_addr_mask = 0x3FFF;
         self.rtc_256_counter = 0;
+        self.lcd_sample_phase = 0;
         self.iv_queue.clear();
         self.do_warm_reset = false;
+        self.power_off_requested = false;
         self.audio.reset();
         self.cycles = 0;
         self.tb_cycles = 0;
@@ -1411,6 +1407,8 @@ impl Machine for Nc3000Machine {
         // device through a warm reset.
         if pressed && row == 0 && col == 0 && self.is_clk_off() {
             self.do_warm_reset = true;
+        } else if pressed && row == 0 && col == 0 {
+            self.power_off_requested = true;
         }
     }
 
@@ -1419,7 +1417,34 @@ impl Machine for Nc3000Machine {
     }
 
     fn cycles_per_frame(&self) -> u64 {
-        CYCLES_PER_FRAME
+        if self.io[io_reg::CLOCK_CTRL] >> 5 == 0 {
+            CPU_CYCLES_LOW_SPEED
+        } else {
+            CPU_CYCLES_HIGH_SPEED
+        }
+    }
+
+    fn frame_rate(&self) -> u32 {
+        FRAME_RATE
+    }
+
+    fn run_frame(&mut self, cpu: &mut Cpu) {
+        for slice in 0..CPU_SLICES_PER_FRAME {
+            let target = if self.io[io_reg::CLOCK_CTRL] >> 5 == 0 {
+                192
+            } else {
+                1_536
+            };
+            let mut cycles = 0;
+            while cycles < target {
+                cycles += self.step(cpu);
+            }
+            if matches!(slice, 30 | 330 | 630 | 930) && self.time_base_enable() {
+                self.io[io_reg::INT_STATUS] |= 0x08;
+                cpu.irq_pending = true;
+            }
+        }
+        self.end_of_frame(cpu);
     }
 
     fn step(&mut self, cpu: &mut Cpu) -> u64 {
@@ -1427,22 +1452,27 @@ impl Machine for Nc3000Machine {
             self.warm_reset(cpu);
         }
 
-        // With the clock off the CPU is suspended; still advance the
-        // periodic timers (RTC keeps running while in standby).
-        let cycles = if self.is_clk_off() {
-            CYCLES_PER_FRAME
-        } else {
-            let mut bus = Nc3000Bus { machine: self };
-            cpu.step(&mut bus)
-        };
+        let mut bus = Nc3000Bus { machine: self };
+        let cycles = cpu.step(&mut bus);
 
-        self.tick_periodic(cpu, cycles as u32);
+        let frame_cycles = self.cycles_per_frame();
+        self.tb_cycles += cycles * TIMER_CYCLES_PER_FRAME;
+        let periodic_cycles = self.tb_cycles / frame_cycles;
+        self.tb_cycles %= frame_cycles;
+        if periodic_cycles != 0 {
+            self.tick_periodic(cpu, periodic_cycles as u32);
+        }
         cycles
     }
 
     fn end_of_frame(&mut self, _cpu: &mut Cpu) {
-        self.lcd
-            .copy_from_with_persistence(&self.ram, LCD_BUFFER_ADDR);
+        if self.lcd_sample_phase == 0 {
+            self.lcd.copy_from(&self.ram, LCD_BUFFER_ADDR);
+        }
+        self.lcd_sample_phase = (self.lcd_sample_phase + 1) % 3;
+        if !self.power_off_requested && self.ram[AUTO_SLEEP_COUNTER_ADDR] >= 48 {
+            self.ram[AUTO_SLEEP_COUNTER_ADDR] = 0;
+        }
     }
 
     fn peek(&self, addr: u16) -> u8 {
@@ -1541,6 +1571,24 @@ mod tests {
         assert_eq!(machine.lcd.framebuffer_raw().last(), Some(&0xCC));
     }
 
+    #[test]
+    fn lcd_publishes_one_complete_temporal_phase() {
+        let mut machine = empty_machine();
+        let mut cpu = Cpu::new();
+        machine.ram[LCD_BUFFER_ADDR] = 0xAA;
+
+        machine.end_of_frame(&mut cpu);
+        assert_eq!(machine.lcd.framebuffer_raw()[0], 0xAA);
+
+        machine.ram[LCD_BUFFER_ADDR] = 0x55;
+        machine.end_of_frame(&mut cpu);
+        machine.end_of_frame(&mut cpu);
+        assert_eq!(machine.lcd.framebuffer_raw()[0], 0xAA);
+
+        machine.end_of_frame(&mut cpu);
+        assert_eq!(machine.lcd.framebuffer_raw()[0], 0x55);
+    }
+
     /// Build RomFiles from the repository-root roms/ directory, or None if
     /// the dumps are not present (tests then skip).
     fn nc3000_rom_files() -> Option<RomFiles> {
@@ -1592,19 +1640,15 @@ mod tests {
     }
 
     fn run_frame(machine: &mut Nc3000Machine, cpu: &mut Cpu) {
-        let mut acc = 0u64;
-        while acc < CYCLES_PER_FRAME {
-            acc += machine.step(cpu);
-        }
-        machine.end_of_frame(cpu);
+        machine.run_frame(cpu);
     }
 
     fn confirm_first_boot(machine: &mut Nc3000Machine, cpu: &mut Cpu, key_id: u8) {
-        for _ in 0..240 {
+        for _ in 0..512 {
             run_frame(machine, cpu);
         }
         machine.set_key(key_id, true);
-        for _ in 0..3 {
+        for _ in 0..7 {
             run_frame(machine, cpu);
         }
         machine.set_key(key_id, false);
@@ -1635,13 +1679,13 @@ mod tests {
     }
 
     fn measure_sustained_screen(machine: &mut Nc3000Machine, cpu: &mut Cpu) -> (usize, u32) {
-        for _ in 0..180 {
+        for _ in 0..128 {
             run_frame(machine, cpu);
         }
         let mut min_nonzero = usize::MAX;
         let mut max_changed = 0;
         let mut previous = machine.lcd.framebuffer_xrgb8888();
-        for _ in 0..1200 {
+        for _ in 0..384 {
             run_frame(machine, cpu);
             let current = machine.lcd.framebuffer_xrgb8888();
             let nonzero = current.iter().filter(|&&pixel| pixel & 0xFF < 0xF0).count();
@@ -1676,7 +1720,7 @@ mod tests {
     }
 
     #[test]
-    fn rtc_subsecond_register_drives_keep_awake_tick() {
+    fn rtc_subsecond_register_wraps_without_changing_sleep_counter() {
         let mut machine = empty_machine();
         let mut cpu = Cpu::new();
         machine.ram[AUTO_SLEEP_COUNTER_ADDR] = 8;
@@ -1687,14 +1731,27 @@ mod tests {
 
         assert_eq!(machine.ext_reg[ext_reg::TR_MS], 0);
         assert_eq!(machine.rtc_256_counter, 0);
+        assert_eq!(machine.ram[AUTO_SLEEP_COUNTER_ADDR], 8);
+    }
+
+    #[test]
+    fn frame_boundary_resets_firmware_sleep_counter_before_standby() {
+        let mut machine = empty_machine();
+        let mut cpu = Cpu::new();
+        machine.ram[AUTO_SLEEP_COUNTER_ADDR] = 48;
+
+        machine.end_of_frame(&mut cpu);
+
         assert_eq!(machine.ram[AUTO_SLEEP_COUNTER_ADDR], 0);
     }
 
     #[test]
     fn uses_nc3000_clock_rate_for_video_frames() {
-        let machine = empty_machine();
+        let mut machine = empty_machine();
 
-        assert_eq!(machine.cycles_per_frame(), 10_240_000 / 30);
+        assert_eq!(machine.cycles_per_frame(), CPU_CYCLES_LOW_SPEED);
+        machine.io[io_reg::CLOCK_CTRL] = 0x20;
+        assert_eq!(machine.cycles_per_frame(), CPU_CYCLES_HIGH_SPEED);
     }
 
     #[test]
@@ -1966,7 +2023,7 @@ mod tests {
         let start = std::time::Instant::now();
         for _ in 0..5 {
             // replicate Emulator::run_frame
-            let target = CYCLES_PER_FRAME;
+            let target = machine.cycles_per_frame();
             let mut acc = 0u64;
             let mut steps = 0u64;
             while acc < target {
@@ -1990,12 +2047,12 @@ mod tests {
         cpu.reset(machine.peek_u16(crate::cpu::RESET_VECTOR));
 
         preserve_nand_at_first_boot(&mut machine, &mut cpu);
-        for _ in 0..120 {
+        for _ in 0..256 {
             run_frame(&mut machine, &mut cpu);
         }
 
         machine.set_key(0, true);
-        for _ in 0..3 {
+        for _ in 0..7 {
             run_frame(&mut machine, &mut cpu);
         }
         machine.set_key(0, false);
@@ -2065,7 +2122,8 @@ mod tests {
         let mut max_nonzero = 0;
         for _ in 0..150 {
             let mut acc = 0u64;
-            while acc < CYCLES_PER_FRAME {
+            let target = machine.cycles_per_frame();
+            while acc < target {
                 acc += machine.step(&mut cpu);
             }
             machine.end_of_frame(&mut cpu);

@@ -22,10 +22,6 @@ pub const FRAME_RATE: u32 = 30;
 /// CPU cycles per frame at 5.12MHz
 pub const CYCLES_PER_FRAME: u64 = 5_120_000 / FRAME_RATE as u64;
 
-fn default_pixel_brightness() -> Vec<u8> {
-    vec![0xFF; LCD_WIDTH * LCD_HEIGHT]
-}
-
 /// LCD color for pixel rendering
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LcdColor {
@@ -41,9 +37,6 @@ pub struct Lcd {
     /// LCD framebuffer (160x80 pixels, 1 bit per pixel, packed bytes)
     /// Stored as raw bytes from RAM, converted to RGBA on output
     framebuffer: Vec<u8>,
-    /// Per-pixel LCD persistence brightness (0 = black, 255 = white).
-    #[serde(skip, default = "default_pixel_brightness")]
-    pixel_brightness: Vec<u8>,
     /// Current LCD address in RAM
     pub lcd_addr: u32,
     /// Whether LCD has been updated this frame
@@ -55,7 +48,6 @@ impl Lcd {
     pub fn new() -> Self {
         Self {
             framebuffer: vec![0; LCD_BUFFER_SIZE],
-            pixel_brightness: default_pixel_brightness(),
             lcd_addr: 0,
             dirty: false,
         }
@@ -64,11 +56,6 @@ impl Lcd {
     /// Reset LCD state
     pub fn reset(&mut self) {
         self.framebuffer.fill(0);
-        if self.pixel_brightness.len() != LCD_WIDTH * LCD_HEIGHT {
-            self.pixel_brightness = default_pixel_brightness();
-        } else {
-            self.pixel_brightness.fill(0xFF);
-        }
         self.lcd_addr = 0;
         self.dirty = false;
     }
@@ -96,43 +83,10 @@ impl Lcd {
         if addr + LCD_BUFFER_SIZE <= ram.len() {
             self.framebuffer
                 .copy_from_slice(&ram[addr..addr + LCD_BUFFER_SIZE]);
-            self.update_pixel_brightness(false);
             self.dirty = true;
             true
         } else {
             false
-        }
-    }
-
-    /// Copy a framebuffer while simulating the persistence of a passive LCD.
-    pub fn copy_from_with_persistence(&mut self, ram: &[u8], addr: usize) -> bool {
-        if addr + LCD_BUFFER_SIZE <= ram.len() {
-            self.framebuffer
-                .copy_from_slice(&ram[addr..addr + LCD_BUFFER_SIZE]);
-            self.update_pixel_brightness(true);
-            self.dirty = true;
-            true
-        } else {
-            false
-        }
-    }
-
-    fn update_pixel_brightness(&mut self, persistence: bool) {
-        if self.pixel_brightness.len() != LCD_WIDTH * LCD_HEIGHT {
-            self.pixel_brightness = vec![0xFF; LCD_WIDTH * LCD_HEIGHT];
-        }
-        for (index, brightness) in self.pixel_brightness.iter_mut().enumerate() {
-            let byte = self.framebuffer[index / 8];
-            let pixel_on = byte & (1 << (7 - index % 8)) != 0;
-            if !persistence {
-                *brightness = if pixel_on { 0 } else { 0xFF };
-            } else if pixel_on {
-                let delta = (*brightness / 6).max(1);
-                *brightness = brightness.saturating_sub(delta);
-            } else {
-                let delta = ((0xFF - *brightness) / 8).max(1);
-                *brightness = brightness.saturating_add(delta);
-            }
         }
     }
 
@@ -145,9 +99,20 @@ impl Lcd {
     /// Returns 160*80 = 12800 u32 values
     pub fn framebuffer_xrgb8888(&self) -> Vec<u32> {
         let mut pixels = Vec::with_capacity(LCD_WIDTH * LCD_HEIGHT);
-        for &brightness in &self.pixel_brightness {
-            let value = brightness as u32;
-            pixels.push(0xFF00_0000 | value << 16 | value << 8 | value);
+        let on_color: u32 = 0xFF000000;
+        let off_color: u32 = 0xFFFFFFFF;
+
+        for y in 0..LCD_HEIGHT {
+            for x in 0..LCD_WIDTH {
+                let byte_idx = (y * LCD_WIDTH + x) / 8;
+                let bit_idx = 7 - (x % 8);
+                let pixel_on = if byte_idx < self.framebuffer.len() {
+                    self.framebuffer[byte_idx] & (1 << bit_idx) != 0
+                } else {
+                    false
+                };
+                pixels.push(if pixel_on { on_color } else { off_color });
+            }
         }
         pixels
     }
@@ -156,8 +121,20 @@ impl Lcd {
     /// Returns 160*80*4 = 51200 bytes
     pub fn framebuffer_rgba8888(&self) -> Vec<u8> {
         let mut pixels = Vec::with_capacity(LCD_WIDTH * LCD_HEIGHT * 4);
-        for &brightness in &self.pixel_brightness {
-            pixels.extend_from_slice(&[brightness, brightness, brightness, 0xFF]);
+        let on_color: [u8; 4] = [0x00, 0x00, 0x00, 0xFF];
+        let off_color: [u8; 4] = [0xFF, 0xFF, 0xFF, 0xFF];
+
+        for y in 0..LCD_HEIGHT {
+            for x in 0..LCD_WIDTH {
+                let byte_idx = (y * LCD_WIDTH + x) / 8;
+                let bit_idx = 7 - (x % 8);
+                let pixel_on = if byte_idx < self.framebuffer.len() {
+                    self.framebuffer[byte_idx] & (1 << bit_idx) != 0
+                } else {
+                    false
+                };
+                pixels.extend_from_slice(if pixel_on { &on_color } else { &off_color });
+            }
         }
         pixels
     }
@@ -176,28 +153,5 @@ impl Lcd {
 impl Default for Lcd {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn persistence_blends_alternating_subframes() {
-        let mut lcd = Lcd::new();
-        let off = vec![0; LCD_BUFFER_SIZE];
-        let on = vec![0xFF; LCD_BUFFER_SIZE];
-
-        for frame in 0..120 {
-            let source = if frame % 2 == 0 { &on } else { &off };
-            assert!(lcd.copy_from_with_persistence(source, 0));
-        }
-        let first = lcd.framebuffer_xrgb8888()[0] & 0xFF;
-        assert!(lcd.copy_from_with_persistence(&on, 0));
-        let second = lcd.framebuffer_xrgb8888()[0] & 0xFF;
-
-        assert!((64..224).contains(&first));
-        assert!(first.abs_diff(second) < 32);
     }
 }

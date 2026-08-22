@@ -192,14 +192,11 @@ impl DeviceSkin {
             for x in x0..x1 {
                 let source_x = (x - x0) * LCD_WIDTH / (x1 - x0);
                 let lcd_pixel = lcd[source_y * LCD_WIDTH + source_x] & 0x00FF_FFFF;
-                let brightness = lcd_pixel & 0xFF;
-                let darkness = 0xFF - brightness;
-                let blend = |shift: u32| {
-                    let background = (self.spec.lcd_background >> shift) & 0xFFu32;
-                    let foreground = (self.spec.lcd_foreground >> shift) & 0xFFu32;
-                    (background * brightness + foreground * darkness + 0x7F) / 0xFF
+                output[y * self.width + x] = if lcd_pixel == 0x00FF_FFFF {
+                    self.spec.lcd_background
+                } else {
+                    self.spec.lcd_foreground
                 };
-                output[y * self.width + x] = blend(16) << 16 | blend(8) << 8 | blend(0);
             }
         }
     }
@@ -448,19 +445,6 @@ mod tests {
             output[screen_y * skin.width() + screen_x],
             skin.spec.lcd_background
         );
-    }
-
-    #[test]
-    fn lcd_blends_persistence_brightness_into_the_skin() {
-        let skin = DeviceSkin::load(MachineModel::Nc3000, 4).unwrap();
-        let lcd = vec![0xFF80_8080; LCD_WIDTH * LCD_HEIGHT];
-        let output = skin.render(&lcd, layout_for(MachineModel::Nc3000), &[false; 64]);
-        let screen_x = skin.scale_x(skin.spec.screen.x + skin.spec.screen.width / 2);
-        let screen_y = skin.scale_y(skin.spec.screen.y + skin.spec.screen.height / 2);
-        let pixel = output[screen_y * skin.width() + screen_x];
-
-        assert_ne!(pixel, skin.spec.lcd_background);
-        assert_ne!(pixel, skin.spec.lcd_foreground);
     }
 
     #[test]

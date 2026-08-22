@@ -146,9 +146,9 @@ pub struct RomFiles {
   the NAND covers two planes (~66MB plus an optional 64-page first-plane
   dump). The main NAND follows those 64 pages; when `nand0` is absent, the
   emulator initializes the NC3000 marker required by the firmware.
-- The generic frame loop asks each machine for its cycle budget. NC3000 uses
-  its native 10.24 MHz rate instead of the 5.12 MHz budget used by NC2000-era
-  models, and its periodic timers use the same model-specific clock.
+- NC3000 overrides the generic frame loop with its native 64 Hz schedule. Each
+  frame runs 1202 CPU slices at the clock-control-selected speed and places the
+  four 256 Hz timebase interrupts at fixed slice boundaries.
 - Memory map: 0x2000-0x3FFF is always RAM (no RAMB); banks 0x00-0x1F
   select NOR pages; banks 0x80+ are invalid (no extended RAM). Bank 0/1
   with ROA set map the whole 0x4000-0xBFFF window onto internal RAM
@@ -166,15 +166,14 @@ pub struct RomFiles {
 - The one-bit LCD framebuffer is read from its fixed internal RAM window at
   0x19C0; the register-derived address is not used as the host buffer start.
 - Standby/wake: the emulated 256 Hz RTC advances the firmware-visible `TR_MS`
-  register, and quarter-second RTC phases suppress the firmware's immediate
-  auto-sleep in normal desktop use. An explicit ON/OFF press can still switch
+  register. Frame-boundary maintenance resets the firmware inactivity counter
+  before it reaches standby, while an explicit ON/OFF press can still switch
   the clock off (CKS=7). The frontend's logical power key (0,0) triggers a warm
   reset and is translated to the NC3000 hardware scan position (4,0), allowing
   the firmware to observe the held key during startup.
-- NC3000 enables passive-LCD persistence when copying its temporally multiplexed
-  one-bit subframes. The frontend blends the resulting brightness levels into
-  the device skin, so the composed image is stable instead of alternating
-  between raw drive phases.
+- The LCD publishes one complete phase from each three-phase firmware refresh
+  group. Intermediate drive phases are not blended, preventing both rapid
+  alternation and the overlaid startup images it produced.
 - Verified with the official NC3000 firmware: both first-boot choices remain
   visible without frame alternation, and an explicit ON/OFF power cycle wakes
   to a persistently visible screen.
@@ -226,9 +225,9 @@ pub struct Emulator {
 
 `Emulator::new(model, &files)` instantiates the machine, loads its ROMs
 and initializes the CPU from the machine's reset vector. `from_rom` is
-kept as a convenience for the NC1020 case. The frame loop calls
-`machine.step()` until `CYCLES_PER_FRAME` and then
-`machine.end_of_frame()`.
+kept as a convenience for the NC1020 case. The frame loop calls the machine's
+`run_frame()` implementation; the default uses `cycles_per_frame()`, while
+models with hardware-specific scheduling can override the whole frame.
 
 The standalone frontend's optional `--state-file` path stores a gzip-compressed,
 versioned persistent session. The envelope binds the session to its hardware
