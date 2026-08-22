@@ -3,66 +3,500 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WQXEmu - 文曲星 NC1020/PC1000/CC800/NC2000/NC3000 模拟器</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: #0d1117;
-            color: #c9d1d9;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-        }
-        .container {
-            text-align: center;
-            padding: 2rem;
-        }
-        h1 {
-            font-size: 3rem;
-            color: #58a6ff;
-            margin-bottom: 0.5rem;
-        }
-        .subtitle {
-            font-size: 1.2rem;
-            color: #8b949e;
-            margin-bottom: 2rem;
-        }
-        .message {
-            font-size: 1.5rem;
-            color: #f0f6fc;
-            margin-bottom: 1rem;
-        }
-        .en {
-            font-size: 1.1rem;
-            color: #8b949e;
-        }
-        .badge {
-            display: inline-block;
-            margin-top: 2rem;
-            padding: 0.5rem 1.5rem;
-            border: 1px solid #30363d;
-            border-radius: 2rem;
-            font-size: 0.9rem;
-            color: #8b949e;
-        }
-        a {
-            color: #58a6ff;
-            text-decoration: none;
-        }
-        a:hover { text-decoration: underline; }
-    </style>
+    <title id="pageTitle">WQXEmu - 文曲星电子词典模拟器</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>星</text></svg>">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=Ma+Shan+Zheng&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="container">
-        <h1>WQXEmu</h1>
-        <p class="subtitle">文曲星 NC1020 / PC1000 / CC800 / NC2000 / NC3000 模拟器</p>
-        <p class="message">项目正在开发中，敬请期待</p>
-        <p class="en">Under development. Stay tuned.</p>
-        <div class="badge">
-            <a href="https://github.com/AloysHF/WQXEmu">GitHub</a>
+    <!-- Skip to main content -->
+    <a href="#main" class="skip-link" data-i18n="skipToContent">跳转到主要内容</a>
+
+    <!-- Navigation -->
+    <nav class="nav" id="nav">
+        <div class="nav-inner">
+            <a href="#" class="nav-logo">
+                <span class="logo-char">星</span>
+                <span class="logo-text">WQXEmu</span>
+            </a>
+            <div class="nav-links">
+                <a href="#models" data-i18n="navModels">机型</a>
+                <a href="#features" data-i18n="navFeatures">特性</a>
+                <a href="#architecture" data-i18n="navArchitecture">架构</a>
+                <a href="#quickstart" data-i18n="navQuickStart">快速开始</a>
+                <a href="https://github.com/AloysHF/WQXEmu" class="nav-github" target="_blank" rel="noopener">
+                    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+                    </svg>
+                    GitHub
+                </a>
+                <button class="lang-toggle" id="langToggle" aria-label="Toggle language">
+                    <span class="lang-zh">中</span>
+                    <span class="lang-en">EN</span>
+                </button>
+            </div>
+            <button class="nav-mobile-toggle" id="mobileToggle" aria-label="Menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
         </div>
-    </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <header class="hero" id="hero">
+        <canvas id="inkCanvas" class="hero-canvas"></canvas>
+        <div class="hero-content">
+            <div class="hero-badge">
+                <span class="badge-icon">✦</span>
+                <span data-i18n="heroBadge">Rust 编写 · 低级仿真</span>
+            </div>
+            <h1 class="hero-title">
+                <span class="title-calligraphy" data-i18n="heroCalligraphy">文曲星</span>
+                <span class="title-sub" data-i18n="heroSubtitle">模拟器</span>
+            </h1>
+            <p class="hero-desc" data-i18n="heroDesc">
+                以 Rust 编写的文曲星电子词典模拟器，采用低级仿真(LLE)技术运行真实固件。<br>
+                支持 NC1020、PC1000、CC800、NC2000、NC3000 五款经典机型。
+            </p>
+            <div class="hero-actions">
+                <a href="https://github.com/AloysHF/WQXEmu/releases/latest" class="btn btn-primary" target="_blank" rel="noopener">
+                    <span data-i18n="btnDownload">下载</span>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M2.75 14A1.75 1.75 0 011 12.25v-2.5a.75.75 0 011.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-2.5a.75.75 0 011.5 0v2.5A1.75 1.75 0 0113.25 14H2.75z"/>
+                        <path d="M7.25 7.689V2a.75.75 0 011.5 0v5.689l1.97-1.969a.749.749 0 111.06 1.06l-3.25 3.25a.749.749 0 01-1.06 0L4.22 6.78a.749.749 0 111.06-1.06l1.97 1.969z"/>
+                    </svg>
+                </a>
+                <a href="https://github.com/AloysHF/WQXEmu" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <span data-i18n="btnSource">源码</span>
+                </a>
+            </div>
+            <div class="hero-stats">
+                <div class="stat">
+                    <span class="stat-num">5</span>
+                    <span class="stat-label" data-i18n="statModels">款机型</span>
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat">
+                    <span class="stat-num">6502</span>
+                    <span class="stat-label" data-i18n="statCPU">CPU</span>
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat">
+                    <span class="stat-num">160×80</span>
+                    <span class="stat-label" data-i18n="statLCD">LCD</span>
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat">
+                    <span class="stat-num">88+</span>
+                    <span class="stat-label" data-i18n="statTests">测试</span>
+                </div>
+            </div>
+        </div>
+        <div class="hero-devices">
+            <div class="device-showcase" id="deviceShowcase">
+                <img src="res/NC1020.png" alt="NC1020" class="device-img active" data-model="NC1020">
+                <img src="res/PC1000.png" alt="PC1000" class="device-img" data-model="PC1000">
+                <img src="res/CC800.png" alt="CC800" class="device-img" data-model="CC800">
+                <img src="res/NC2000.png" alt="NC2000" class="device-img" data-model="NC2000">
+                <img src="res/NC3000.png" alt="NC3000" class="device-img" data-model="NC3000">
+            </div>
+            <div class="device-nav">
+                <button class="device-dot active" data-index="0" aria-label="NC1020"></button>
+                <button class="device-dot" data-index="1" aria-label="PC1000"></button>
+                <button class="device-dot" data-index="2" aria-label="CC800"></button>
+                <button class="device-dot" data-index="3" aria-label="NC2000"></button>
+                <button class="device-dot" data-index="4" aria-label="NC3000"></button>
+            </div>
+        </div>
+        <div class="hero-scroll-hint">
+            <span data-i18n="scrollHint">向下探索</span>
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M10 14l-5-5h10l-5 5z"/>
+            </svg>
+        </div>
+    </header>
+
+    <main id="main">
+        <!-- About Section -->
+        <section class="section about" id="about">
+            <div class="container">
+                <div class="about-grid">
+                    <div class="about-text">
+                        <h2 class="section-title" data-i18n="aboutTitle">何为文曲星？</h2>
+                        <p class="about-desc" data-i18n="aboutDesc">
+                            文曲星是中国金远见公司生产的系列电子词典，自1990年代末起风靡全国。
+                            它不仅是一台词典，更是无数80、90后的青春记忆——<br><br>
+                            在那个智能手机尚未普及的年代，文曲星承载了我们的课堂笔记、课间游戏、和对编程的最初探索。
+                        </p>
+                        <div class="about-flow">
+                            <div class="flow-item">
+                                <div class="flow-icon">📟</div>
+                                <span data-i18n="flowDevice">文曲星硬件</span>
+                            </div>
+                            <div class="flow-arrow">→</div>
+                            <div class="flow-item">
+                                <div class="flow-icon">💾</div>
+                                <span data-i18n="flowDump">固件 Dump</span>
+                            </div>
+                            <div class="flow-arrow">→</div>
+                            <div class="flow-item">
+                                <div class="flow-icon">⚙️</div>
+                                <span data-i18n="flowEmu">WQXEmu</span>
+                            </div>
+                            <div class="flow-arrow">→</div>
+                            <div class="flow-item">
+                                <div class="flow-icon">✨</div>
+                                <span data-i18n="flowPlay">重温经典</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="about-visual">
+                        <div class="ink-frame">
+                            <img src="res/NC1020.png" alt="NC1020 模拟器截图" class="about-img">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Models Section -->
+        <section class="section models" id="models">
+            <div class="container">
+                <h2 class="section-title" data-i18n="modelsTitle">支持机型</h2>
+                <p class="section-subtitle" data-i18n="modelsSubtitle">五款经典文曲星机型，完整硬件仿真</p>
+                <div class="models-grid">
+                    <div class="model-card" data-model="nc1020">
+                        <div class="model-img-wrap">
+                            <img src="res/NC1020.png" alt="NC1020" class="model-img">
+                        </div>
+                        <div class="model-info">
+                            <h3 class="model-name">NC1020</h3>
+                            <span class="model-status working" data-i18n="statusWorking">正常运行</span>
+                            <p class="model-desc" data-i18n="nc1020Desc">经典机型，启动到主菜单，键盘和 NOR 正常工作</p>
+                        </div>
+                    </div>
+                    <div class="model-card" data-model="pc1000">
+                        <div class="model-img-wrap">
+                            <img src="res/PC1000.png" alt="PC1000" class="model-img">
+                        </div>
+                        <div class="model-info">
+                            <h3 class="model-name">PC1000</h3>
+                            <span class="model-status working" data-i18n="statusWorking">正常运行</span>
+                            <p class="model-desc" data-i18n="pc1000Desc">启动到主菜单，键盘和 NOR 正常工作</p>
+                        </div>
+                    </div>
+                    <div class="model-card" data-model="cc800">
+                        <div class="model-img-wrap">
+                            <img src="res/CC800.png" alt="CC800" class="model-img">
+                        </div>
+                        <div class="model-info">
+                            <h3 class="model-name">CC800</h3>
+                            <span class="model-status working" data-i18n="statusWorking">正常运行</span>
+                            <p class="model-desc" data-i18n="cc800Desc">启动到主菜单，键盘和 NOR 正常工作</p>
+                        </div>
+                    </div>
+                    <div class="model-card" data-model="nc2000">
+                        <div class="model-img-wrap">
+                            <img src="res/NC2000.png" alt="NC2000" class="model-img">
+                        </div>
+                        <div class="model-info">
+                            <h3 class="model-name">NC2000</h3>
+                            <span class="model-status working" data-i18n="statusWorking">正常运行</span>
+                            <p class="model-desc" data-i18n="nc2000Desc">启动到时钟界面，待机/唤醒功能正常</p>
+                        </div>
+                    </div>
+                    <div class="model-card" data-model="nc3000">
+                        <div class="model-img-wrap">
+                            <img src="res/NC3000.png" alt="NC3000" class="model-img">
+                        </div>
+                        <div class="model-info">
+                            <h3 class="model-name">NC3000</h3>
+                            <span class="model-status working" data-i18n="statusWorking">正常运行</span>
+                            <p class="model-desc" data-i18n="nc3000Desc">启动到时钟界面，待机/唤醒功能正常</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Features Section -->
+        <section class="section features" id="features">
+            <div class="container">
+                <h2 class="section-title" data-i18n="featuresTitle">核心特性</h2>
+                <p class="section-subtitle" data-i18n="featuresSubtitle">精确的硬件仿真，完整的功能实现</p>
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="4" y="4" width="24" height="24" rx="2"/>
+                                <path d="M10 10h4v4h-4zM18 10h4v4h-4zM10 18h4v4h-4zM18 18h4v4h-4z"/>
+                            </svg>
+                        </div>
+                        <h3 data-i18n="featureCPUTitle">6502/W65C02 CPU</h3>
+                        <p data-i18n="featureCPUDesc">周期精确的指令执行，完整支持 BCD 模式和所有寻址模式</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="6" y="4" width="20" height="24" rx="2"/>
+                                <path d="M10 8h12M10 12h12M10 16h12M10 20h8"/>
+                            </svg>
+                        </div>
+                        <h3 data-i18n="featureLCDTitle">LCD 显示</h3>
+                        <p data-i18n="featureLCDDesc">160×80 像素，4 灰度级别，支持残影和格栅效果</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="4" y="8" width="24" height="16" rx="2"/>
+                                <path d="M8 14h2v2H8zM12 14h2v2H12zM16 14h2v2H16zM20 14h2v2H20zM24 14h2v2H24z"/>
+                            </svg>
+                        </div>
+                        <h3 data-i18n="featureKeyboardTitle">键盘输入</h3>
+                        <p data-i18n="featureKeyboardDesc">完整的 QWERTY 键盘矩阵仿真，支持多机型键位布局</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="16" cy="16" r="12"/>
+                                <path d="M16 8v8l6 4"/>
+                            </svg>
+                        </div>
+                        <h3 data-i18n="featureTimerTitle">定时器系统</h3>
+                        <p data-i18n="featureTimerDesc">多个定时器源，中断生成，RTC 实时时钟</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M8 4v24M24 4v24"/>
+                                <path d="M8 16c4-4 12 4 16 0"/>
+                            </svg>
+                        </div>
+                        <h3 data-i18n="featureAudioTitle">音频系统</h3>
+                        <p data-i18n="featureAudioDesc">SPDS104A DSP 仿真，支持音调生成和音频输出</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M4 8h24v16H4z"/>
+                                <path d="M4 8l12 10L28 8"/>
+                            </svg>
+                        </div>
+                        <h3 data-i18n="featureRetroArchTitle">RetroArch 核心</h3>
+                        <p data-i18n="featureRetroArchDesc">libretro 集成，支持 RetroArch 前端的所有功能</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Architecture Section -->
+        <section class="section architecture" id="architecture">
+            <div class="container">
+                <h2 class="section-title" data-i18n="archTitle">技术架构</h2>
+                <p class="section-subtitle" data-i18n="archSubtitle">模块化设计，清晰的层次结构</p>
+                <div class="arch-diagram">
+                    <div class="arch-layer arch-layer-top">
+                        <div class="arch-box arch-frontend">
+                            <span class="arch-label">wqxemu</span>
+                            <span class="arch-desc" data-i18n="archFrontend">独立桌面前端</span>
+                        </div>
+                        <div class="arch-box arch-libretro">
+                            <span class="arch-label">wqxemu-libretro</span>
+                            <span class="arch-desc" data-i18n="archLibretro">RetroArch 核心</span>
+                        </div>
+                    </div>
+                    <div class="arch-connector">
+                        <svg width="100%" height="40" viewBox="0 0 400 40" preserveAspectRatio="none">
+                            <path d="M100 0 L100 20 L200 20 M300 0 L300 20 L200 20" stroke="currentColor" stroke-width="2" fill="none"/>
+                            <circle cx="200" cy="20" r="4" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <div class="arch-layer arch-layer-mid">
+                        <div class="arch-box arch-core">
+                            <span class="arch-label">wqxemu-core</span>
+                            <span class="arch-desc" data-i18n="archCore">平台无关仿真引擎</span>
+                        </div>
+                    </div>
+                    <div class="arch-connector">
+                        <svg width="100%" height="40" viewBox="0 0 400 40" preserveAspectRatio="none">
+                            <path d="M200 0 L200 20" stroke="currentColor" stroke-width="2" fill="none"/>
+                            <path d="M120 20 L280 20" stroke="currentColor" stroke-width="2" fill="none"/>
+                            <circle cx="200" cy="20" r="4" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <div class="arch-layer arch-layer-bottom">
+                        <div class="arch-component">
+                            <span>cpu.rs</span>
+                            <span class="arch-comp-desc">6502 CPU</span>
+                        </div>
+                        <div class="arch-component">
+                            <span>memory.rs</span>
+                            <span class="arch-comp-desc" data-i18n="archMemory">内存总线</span>
+                        </div>
+                        <div class="arch-component">
+                            <span>lcd.rs</span>
+                            <span class="arch-comp-desc">LCD</span>
+                        </div>
+                        <div class="arch-component">
+                            <span>input.rs</span>
+                            <span class="arch-comp-desc" data-i18n="archInput">键盘输入</span>
+                        </div>
+                        <div class="arch-component">
+                            <span>audio.rs</span>
+                            <span class="arch-comp-desc" data-i18n="archAudio">音频</span>
+                        </div>
+                        <div class="arch-component">
+                            <span>timer.rs</span>
+                            <span class="arch-comp-desc" data-i18n="archTimer">定时器</span>
+                        </div>
+                        <div class="arch-component">
+                            <span>flash.rs</span>
+                            <span class="arch-comp-desc">Flash</span>
+                        </div>
+                        <div class="arch-component">
+                            <span>machines/</span>
+                            <span class="arch-comp-desc" data-i18n="archMachines">机型实现</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Quick Start Section -->
+        <section class="section quickstart" id="quickstart">
+            <div class="container">
+                <h2 class="section-title" data-i18n="qsTitle">快速开始</h2>
+                <p class="section-subtitle" data-i18n="qsSubtitle">几步即可运行文曲星模拟器</p>
+                <div class="qs-grid">
+                    <div class="qs-card">
+                        <div class="qs-step">1</div>
+                        <h3 data-i18n="qsStep1Title">获取固件</h3>
+                        <p data-i18n="qsStep1Desc">从文曲星硬件 dump 固件文件，或从社区获取</p>
+                    </div>
+                    <div class="qs-card">
+                        <div class="qs-step">2</div>
+                        <h3 data-i18n="qsStep2Title">下载 WQXEmu</h3>
+                        <p data-i18n="qsStep2Desc">从 GitHub Releases 下载对应平台的二进制文件</p>
+                    </div>
+                    <div class="qs-card">
+                        <div class="qs-step">3</div>
+                        <h3 data-i18n="qsStep3Title">运行模拟器</h3>
+                        <div class="qs-code">
+                            <code>wqxemu --model nc1020 \<br>&nbsp;&nbsp;--rom obj_lu.bin \<br>&nbsp;&nbsp;--nor nc1020.fls</code>
+                        </div>
+                    </div>
+                </div>
+                <div class="qs-firmware-table">
+                    <h3 data-i18n="qsFirmwareTitle">固件要求</h3>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th data-i18n="qsTableModel">机型</th>
+                                    <th data-i18n="qsTableRequired">必需固件</th>
+                                    <th data-i18n="qsTableOptional">可选固件</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td>NC1020</td><td>ROM + NOR</td><td>—</td></tr>
+                                <tr><td>PC1000</td><td>ROM + NOR</td><td>—</td></tr>
+                                <tr><td>CC800</td><td>ROM + NOR</td><td>—</td></tr>
+                                <tr><td>NC2000</td><td>NOR + NAND + NAND0</td><td>—</td></tr>
+                                <tr><td>NC3000</td><td>NOR + NAND</td><td>NAND0</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Build Section -->
+        <section class="section build" id="build">
+            <div class="container">
+                <h2 class="section-title" data-i18n="buildTitle">从源码构建</h2>
+                <p class="section-subtitle" data-i18n="buildSubtitle">需要 Rust 工具链</p>
+                <div class="build-grid">
+                    <div class="build-card">
+                        <h3 data-i18n="buildStandaloneTitle">独立模式</h3>
+                        <div class="build-code">
+                            <pre><code>cargo build --release
+cargo run --release -- \
+  --model nc1020 \
+  --rom roms/nc1020/obj_lu.bin \
+  --nor roms/nc1020/nc1020.fls</code></pre>
+                        </div>
+                    </div>
+                    <div class="build-card">
+                        <h3 data-i18n="buildLibretroTitle">Libretro 核心</h3>
+                        <div class="build-code">
+                            <pre><code>cargo build -p wqxemu-libretro --release</code></pre>
+                        </div>
+                        <p class="build-note" data-i18n="buildLibretroNote">
+                            编译后的核心文件可加载到 RetroArch 中使用
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Links Section -->
+        <section class="section links" id="links">
+            <div class="container">
+                <h2 class="section-title" data-i18n="linksTitle">相关链接</h2>
+                <div class="links-grid">
+                    <a href="https://github.com/AloysHF/WQXEmu" class="link-card" target="_blank" rel="noopener">
+                        <svg width="24" height="24" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+                        </svg>
+                        <span>GitHub</span>
+                    </a>
+                    <a href="https://github.com/AloysHF/WQXEmu/releases" class="link-card" target="_blank" rel="noopener">
+                        <svg width="24" height="24" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M1 7.775V2.75C1 1.784 1.784 1 2.75 1h5.025c.464 0 .91.184 1.238.513l6.25 6.25a1.75 1.75 0 010 2.474l-5.026 5.026a1.75 1.75 0 01-2.474 0l-6.25-6.25A1.752 1.752 0 011 7.775zM6 5a1 1 0 100 2 1 1 0 000-2z"/>
+                        </svg>
+                        <span data-i18n="linkReleases">发布版本</span>
+                    </a>
+                    <a href="https://github.com/AloysHF/WQXEmu/actions" class="link-card" target="_blank" rel="noopener">
+                        <svg width="24" height="24" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M8 0a8 8 0 110 16A8 8 0 018 0zm1.062 4.312a1.25 1.25 0 10-2.5 0v2.5h-2.5a1.25 1.25 0 100 2.5h2.5v2.5a1.25 1.25 0 102.5 0v-2.5h2.5a1.25 1.25 0 100-2.5h-2.5v-2.5z"/>
+                        </svg>
+                        <span data-i18n="linkCI">CI 构建</span>
+                    </a>
+                    <a href="https://discord.gg/7XDdSrYD" class="link-card" target="_blank" rel="noopener">
+                        <svg width="24" height="24" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M13.545 2.907a13.227 13.227 0 00-3.257-1.011.05.05 0 00-.052.025c-.141.25-.297.577-.406.833a12.19 12.19 0 00-3.658 0 8.258 8.258 0 00-.412-.833.051.051 0 00-.052-.025c-1.125.194-2.22.534-3.257 1.011a.041.041 0 00-.021.018C.356 6.024-.213 9.047.066 12.032c.001.014.01.028.021.037a13.276 13.276 0 003.995 2.02.05.05 0 00.056-.019c.308-.42.582-.863.818-1.329a.05.05 0 00-.01-.059.051.051 0 00-.018-.011 8.875 8.875 0 01-1.248-.595.05.05 0 01-.02-.066.051.051 0 01.015-.019c.084-.063.168-.129.248-.195a.05.05 0 01.051-.007c2.619 1.196 5.454 1.196 8.041 0a.052.052 0 01.053.007c.08.066.164.132.248.195a.051.051 0 01-.004.085 8.254 8.254 0 01-1.249.594.05.05 0 00-.03.03.052.052 0 00.003.041c.24.465.515.909.817 1.329a.05.05 0 00.056.019 13.228 13.228 0 004.001-2.02.049.049 0 00.021-.037c.334-3.451-.559-6.449-2.366-9.106a.034.034 0 00-.02-.019z"/>
+                        </svg>
+                        <span>Discord</span>
+                    </a>
+                    <a href="https://qm.qq.com/q/LAO7DKAWUC" class="link-card" target="_blank" rel="noopener">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                        </svg>
+                        <span>QQ 群</span>
+                    </a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <p class="footer-text">
+                    <span class="footer-logo">星</span>
+                    <span data-i18n="footerText">WQXEmu — 文曲星电子词典模拟器</span>
+                </p>
+                <p class="footer-license" data-i18n="footerLicense">
+                    采用 GNU 通用公共许可证 v3.0 或更高版本授权
+                </p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/main.js"></script>
 </body>
 </html>
