@@ -1,6 +1,10 @@
 # WQXEmu — Wenquxing Emulator
 
 <p align="center">
+  <img src="res/logo-banner.png" alt="WQXEmu" width="600">
+</p>
+
+<p align="center">
   <a href="https://AloysHF.github.io/WQXEmu/"><img src="https://img.shields.io/badge/Website-WQXEmu-E8553A?logo=githubpages&logoColor=white" alt="Website"></a>
   <a href="https://github.com/AloysHF/WQXEmu/actions/workflows/ci.yml"><img src="https://github.com/AloysHF/WQXEmu/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/AloysHF/WQXEmu/releases/latest"><img src="https://img.shields.io/github/v/release/AloysHF/WQXEmu" alt="Release"></a>
