@@ -38,8 +38,10 @@ const CPU_FREQ: u32 = 10_240_000;
 const FRAME_RATE: u32 = 64;
 const TIMER_CYCLES_PER_FRAME: u64 = CPU_FREQ as u64 / FRAME_RATE as u64;
 const CPU_SLICES_PER_FRAME: u64 = 1_202;
-const CPU_CYCLES_LOW_SPEED: u64 = CPU_SLICES_PER_FRAME * 192;
-const CPU_CYCLES_HIGH_SPEED: u64 = CPU_SLICES_PER_FRAME * 1_536;
+const CPU_CYCLES_PER_SLICE: u64 = 128;
+const CPU_CYCLES_PER_FRAME: u64 = CPU_SLICES_PER_FRAME * CPU_CYCLES_PER_SLICE;
+const UART_STATE_TAG: u64 = 0x4E43_3300_0000_0000;
+const UART_STATE_TAG_MASK: u64 = 0xFFFF_FF00_0000_0000;
 /// Fixed start of the one-bit LCD framebuffer in internal RAM.
 const LCD_BUFFER_ADDR: usize = 0x19C0;
 
@@ -99,6 +101,13 @@ mod ext_reg {
     pub const RTC_CTRL: usize = 0x0A;
     pub const INT_CLEAR: usize = 0x0B;
     pub const P0_PU: usize = 0x24;
+}
+
+mod interrupt_source {
+    pub const TWO_HZ: u8 = 0x00;
+    pub const SAMPLE: u8 = 0x01;
+    pub const ALARM: u8 = 0x02;
+    pub const NONE: u8 = 0x1F;
 }
 
 /// NOR command state machine states.
@@ -180,10 +189,11 @@ pub struct Nc3000Machine {
     // RTC / interrupt vectors
     rtc_256_counter: u8,
     #[serde(skip)]
-    lcd_sample_phase: u8,
+    frame_phase: u8,
     iv_queue: Vec<u8>,
     tb_cycles: u64,
-    rtc_cycles: u64,
+    // Packed into the legacy rtc_cycles slot for persistent-state compatibility.
+    rtc_uart_state: u64,
     do_warm_reset: bool,
     #[serde(skip)]
     power_off_requested: bool,
@@ -243,10 +253,10 @@ impl Nc3000Machine {
             lcd_buff_addr: 0,
             lcd_buff_addr_mask: 0x3FFF,
             rtc_256_counter: 0,
-            lcd_sample_phase: 0,
+            frame_phase: 0,
             iv_queue: Vec::new(),
             tb_cycles: 0,
-            rtc_cycles: 0,
+            rtc_uart_state: 0,
             do_warm_reset: false,
             power_off_requested: false,
             audio: Audio::new(),
@@ -286,6 +296,41 @@ impl Nc3000Machine {
             self.initialize_first_nand_plane();
         }
         Ok(())
+    }
+
+    fn begin_frame(&mut self) {
+        if self.frame_phase == 0 {
+            if !self.power_off_requested {
+                self.ram[AUTO_SLEEP_COUNTER_ADDR] = 0;
+            }
+            self.bump_rtc();
+        }
+    }
+
+    fn update_rtc_subsecond(&mut self, slice: u64) {
+        let position = u64::from(self.frame_phase) * CPU_SLICES_PER_FRAME + slice;
+        let value = (position * 256 / (u64::from(FRAME_RATE) * CPU_SLICES_PER_FRAME)) as u8;
+        self.ext_reg[ext_reg::TR_MS] = value;
+        self.rtc_256_counter = value;
+    }
+
+    fn finish_frame_rtc(&mut self, cpu: &mut Cpu) {
+        if !matches!(self.frame_phase, 0 | 32) {
+            return;
+        }
+        if self.frame_phase == 0 && self.ext_reg[ext_reg::RTC_CTRL] & 0x02 != 0 && self.chk_alarm()
+        {
+            self.put_iv(interrupt_source::ALARM);
+        }
+        if self.ext_reg[ext_reg::RTC_CTRL] & 0x01 != 0 {
+            self.put_iv(interrupt_source::TWO_HZ);
+        }
+        if self.nmi_enable() {
+            cpu.nmi_pending = true;
+        }
+        if self.peek_iv().is_some() {
+            cpu.irq_pending = true;
+        }
     }
 
     fn load_main_nand(&mut self, data: &[u8]) {
@@ -802,7 +847,21 @@ impl Nc3000Machine {
         value
     }
 
+    fn uart_registers(&self) -> u32 {
+        if self.rtc_uart_state & UART_STATE_TAG_MASK == UART_STATE_TAG {
+            self.rtc_uart_state as u32
+        } else {
+            0
+        }
+    }
+
+    fn set_uart_registers(&mut self, registers: u32) {
+        self.rtc_uart_state = UART_STATE_TAG | u64::from(registers);
+    }
+
     fn read_rtc_3x(&self, addr: u8) -> u8 {
+        let uart = self.uart_registers();
+        let bank = uart as u8;
         match addr as usize {
             io_reg::RTC_3A => 0,
             io_reg::RTC_3B => {
@@ -813,7 +872,15 @@ impl Nc3000Machine {
                 }
             }
             io_reg::RTC_3C => 0,
-            io_reg::RTC_3D => self.io[addr as usize],
+            io_reg::RTC_3D => match bank {
+                0 => {
+                    (self.peek_iv().unwrap_or(interrupt_source::NONE) << 3)
+                        | ((uart >> 8) as u8 & 0x04)
+                }
+                1 => (uart >> 16) as u8 | 0x01,
+                2 => (uart >> 24) as u8 | 0x02,
+                _ => 0x03,
+            },
             _ => 0,
         }
     }
@@ -966,11 +1033,11 @@ impl Nc3000Machine {
                 if idx == ext_reg::RTC_CTRL {
                     self.ext_reg[idx] = value;
                 } else if idx == ext_reg::INT_CLEAR {
-                    self.iv_queue.retain(|&iv| {
-                        (value & 0x01) == 0
-                            || iv != 0x00 && (value & 0x02) == 0
-                            || iv != 0x02 && (value & 0x04) == 0
-                            || iv != 0x01
+                    self.iv_queue.retain(|&iv| match iv {
+                        interrupt_source::TWO_HZ => value & 0x01 == 0,
+                        interrupt_source::ALARM => value & 0x02 == 0,
+                        interrupt_source::SAMPLE => value & 0x04 == 0,
+                        _ => true,
                     });
                     self.ext_reg[idx] = value & 0xF8;
                 } else if idx < 7 {
@@ -988,6 +1055,19 @@ impl Nc3000Machine {
     }
 
     fn write_rtc_3x(&mut self, addr: u8, value: u8) {
+        if addr as usize == io_reg::RTC_3D {
+            let mut uart = self.uart_registers();
+            let bank = uart as u8;
+            let register_value = value & 0xFC;
+            match bank {
+                0 => uart = (uart & !(0xFF_u32 << 8)) | u32::from(register_value & 0x04) << 8,
+                1 => uart = (uart & !(0xFF_u32 << 16)) | u32::from(register_value & 0xC8) << 16,
+                2 => uart = (uart & !(0xFF_u32 << 24)) | u32::from(register_value) << 24,
+                _ => {}
+            }
+            uart = (uart & !0xFF) | u32::from(value & 0x03);
+            self.set_uart_registers(uart);
+        }
         self.io[addr as usize] = value;
     }
 
@@ -1206,7 +1286,7 @@ impl Nc3000Machine {
     }
 
     fn time_base_enable(&self) -> bool {
-        self.io[io_reg::GENERAL_CTRL] & 0x0F != 0
+        self.inner_interrupt_control & 0x08 == 0 && self.io[io_reg::GENERAL_CTRL] & 0x0F != 0
     }
 
     fn nmi_enable(&self) -> bool {
@@ -1270,6 +1350,7 @@ impl Nc3000Machine {
     fn put_iv(&mut self, iv: u8) {
         if !self.iv_queue.contains(&iv) {
             self.iv_queue.push(iv);
+            self.iv_queue.sort_unstable();
         }
     }
 
@@ -1290,34 +1371,6 @@ impl Nc3000Machine {
         while self.cycles >= ta_cycles as u64 {
             self.cycles -= ta_cycles as u64;
             if self.set_timer_a() {
-                cpu.irq_pending = true;
-            }
-        }
-
-        // RTC 256 Hz
-        self.rtc_cycles += delta as u64;
-        let rtc_cycles = (CPU_FREQ / 256) as u64;
-        while self.rtc_cycles >= rtc_cycles {
-            self.rtc_cycles -= rtc_cycles;
-            self.ext_reg[ext_reg::TR_MS] = self.ext_reg[ext_reg::TR_MS].wrapping_add(1);
-            let cnt = self.ext_reg[ext_reg::TR_MS];
-            self.rtc_256_counter = cnt;
-            if cnt == 0 {
-                self.bump_rtc();
-            }
-            if cnt.is_multiple_of(128) {
-                if cnt == 0 && self.ext_reg[ext_reg::RTC_CTRL] & 0x02 != 0 && self.chk_alarm() {
-                    self.put_iv(0x02);
-                }
-                if self.ext_reg[ext_reg::RTC_CTRL] & 0x01 != 0 {
-                    self.put_iv(0x00);
-                }
-            }
-            if cnt % 128 == 64 && self.nmi_enable() {
-                cpu.nmi_pending = true;
-            }
-            if let Some(iv) = self.peek_iv() {
-                let _ = iv;
                 cpu.irq_pending = true;
             }
         }
@@ -1349,14 +1402,14 @@ impl Nc3000Machine {
         self.lcd_buff_addr = 0;
         self.lcd_buff_addr_mask = 0x3FFF;
         self.rtc_256_counter = 0;
-        self.lcd_sample_phase = 0;
+        self.frame_phase = 0;
         self.iv_queue.clear();
         self.do_warm_reset = false;
         self.power_off_requested = false;
         self.audio.reset();
         self.cycles = 0;
         self.tb_cycles = 0;
-        self.rtc_cycles = 0;
+        self.rtc_uart_state = 0;
     }
 }
 
@@ -1417,11 +1470,7 @@ impl Machine for Nc3000Machine {
     }
 
     fn cycles_per_frame(&self) -> u64 {
-        if self.io[io_reg::CLOCK_CTRL] >> 5 == 0 {
-            CPU_CYCLES_LOW_SPEED
-        } else {
-            CPU_CYCLES_HIGH_SPEED
-        }
+        CPU_CYCLES_PER_FRAME
     }
 
     fn frame_rate(&self) -> u32 {
@@ -1429,14 +1478,11 @@ impl Machine for Nc3000Machine {
     }
 
     fn run_frame(&mut self, cpu: &mut Cpu) {
+        self.begin_frame();
         for slice in 0..CPU_SLICES_PER_FRAME {
-            let target = if self.io[io_reg::CLOCK_CTRL] >> 5 == 0 {
-                192
-            } else {
-                1_536
-            };
+            self.update_rtc_subsecond(slice);
             let mut cycles = 0;
-            while cycles < target {
+            while cycles < CPU_CYCLES_PER_SLICE {
                 cycles += self.step(cpu);
             }
             if matches!(slice, 30 | 330 | 630 | 930) && self.time_base_enable() {
@@ -1444,6 +1490,8 @@ impl Machine for Nc3000Machine {
                 cpu.irq_pending = true;
             }
         }
+        self.frame_phase = (self.frame_phase + 1) & 0x3F;
+        self.finish_frame_rtc(cpu);
         self.end_of_frame(cpu);
     }
 
@@ -1466,13 +1514,7 @@ impl Machine for Nc3000Machine {
     }
 
     fn end_of_frame(&mut self, _cpu: &mut Cpu) {
-        if self.lcd_sample_phase == 0 {
-            self.lcd.copy_from(&self.ram, LCD_BUFFER_ADDR);
-        }
-        self.lcd_sample_phase = (self.lcd_sample_phase + 1) % 3;
-        if !self.power_off_requested && self.ram[AUTO_SLEEP_COUNTER_ADDR] >= 48 {
-            self.ram[AUTO_SLEEP_COUNTER_ADDR] = 0;
-        }
+        self.lcd.copy_from(&self.ram, LCD_BUFFER_ADDR);
     }
 
     fn peek(&self, addr: u16) -> u8 {
@@ -1572,7 +1614,7 @@ mod tests {
     }
 
     #[test]
-    fn lcd_publishes_one_complete_temporal_phase() {
+    fn lcd_publishes_every_completed_frame() {
         let mut machine = empty_machine();
         let mut cpu = Cpu::new();
         machine.ram[LCD_BUFFER_ADDR] = 0xAA;
@@ -1581,10 +1623,6 @@ mod tests {
         assert_eq!(machine.lcd.framebuffer_raw()[0], 0xAA);
 
         machine.ram[LCD_BUFFER_ADDR] = 0x55;
-        machine.end_of_frame(&mut cpu);
-        machine.end_of_frame(&mut cpu);
-        assert_eq!(machine.lcd.framebuffer_raw()[0], 0xAA);
-
         machine.end_of_frame(&mut cpu);
         assert_eq!(machine.lcd.framebuffer_raw()[0], 0x55);
     }
@@ -1658,6 +1696,18 @@ mod tests {
         confirm_first_boot(machine, cpu, (5 << 3) | 6);
     }
 
+    fn clear_nand_at_first_boot(machine: &mut Nc3000Machine, cpu: &mut Cpu) {
+        confirm_first_boot(machine, cpu, (5 << 3) | 4);
+        for _ in 0..16 {
+            run_frame(machine, cpu);
+        }
+        machine.set_key((5 << 3) | 6, true);
+        for _ in 0..7 {
+            run_frame(machine, cpu);
+        }
+        machine.set_key((5 << 3) | 6, false);
+    }
+
     fn wait_for_standby(machine: &mut Nc3000Machine, cpu: &mut Cpu) {
         for _ in 0..3000 {
             if machine.is_clk_off() {
@@ -1678,30 +1728,25 @@ mod tests {
         );
     }
 
-    fn measure_sustained_screen(machine: &mut Nc3000Machine, cpu: &mut Cpu) -> (usize, u32) {
+    fn measure_sustained_screen(machine: &mut Nc3000Machine, cpu: &mut Cpu) -> (usize, usize) {
         for _ in 0..128 {
             run_frame(machine, cpu);
         }
         let mut min_nonzero = usize::MAX;
-        let mut max_changed = 0;
-        let mut previous = machine.lcd.framebuffer_xrgb8888();
+        let mut changed_frames = 0;
+        let mut previous = machine.lcd.framebuffer_raw().to_vec();
         for _ in 0..384 {
             run_frame(machine, cpu);
-            let current = machine.lcd.framebuffer_xrgb8888();
-            let nonzero = current.iter().filter(|&&pixel| pixel & 0xFF < 0xF0).count();
+            let current = machine.lcd.framebuffer_raw();
+            let nonzero = current.iter().filter(|&&byte| byte != 0).count();
             min_nonzero = min_nonzero.min(nonzero);
-            let changed = previous
-                .iter()
-                .zip(&current)
-                .map(|(&a, &b)| (a & 0xFF).abs_diff(b & 0xFF))
-                .sum();
-            max_changed = max_changed.max(changed);
-            previous = current;
+            changed_frames += usize::from(previous != current);
+            previous.copy_from_slice(current);
             if machine.is_clk_off() {
-                return (0, u32::MAX);
+                return (0, usize::MAX);
             }
         }
-        (min_nonzero, max_changed)
+        (min_nonzero, changed_frames)
     }
 
     #[test]
@@ -1720,38 +1765,64 @@ mod tests {
     }
 
     #[test]
-    fn rtc_subsecond_register_wraps_without_changing_sleep_counter() {
+    fn rtc_subsecond_register_tracks_the_reference_frame_position() {
         let mut machine = empty_machine();
-        let mut cpu = Cpu::new();
         machine.ram[AUTO_SLEEP_COUNTER_ADDR] = 8;
-        machine.ext_reg[ext_reg::TR_MS] = 0xFF;
-        machine.rtc_cycles = (CPU_FREQ / 256 - 1) as u64;
+        machine.frame_phase = 63;
 
-        machine.tick_periodic(&mut cpu, 1);
+        machine.update_rtc_subsecond(CPU_SLICES_PER_FRAME - 1);
 
-        assert_eq!(machine.ext_reg[ext_reg::TR_MS], 0);
+        assert_eq!(machine.ext_reg[ext_reg::TR_MS], 0xFF);
+        assert_eq!(machine.rtc_256_counter, 0xFF);
+        assert_eq!(machine.ram[AUTO_SLEEP_COUNTER_ADDR], 8);
+
+        machine.frame_phase = 0;
+        machine.update_rtc_subsecond(0);
+
+        assert_eq!(machine.ext_reg[ext_reg::TR_MS], 0x00);
         assert_eq!(machine.rtc_256_counter, 0);
         assert_eq!(machine.ram[AUTO_SLEEP_COUNTER_ADDR], 8);
     }
 
     #[test]
-    fn frame_boundary_resets_firmware_sleep_counter_before_standby() {
+    fn rtc_interrupt_vector_is_prioritized_and_cleared() {
         let mut machine = empty_machine();
-        let mut cpu = Cpu::new();
+        machine.rtc_uart_state = 12_345;
+        assert_eq!(machine.io_read(io_reg::RTC_3D as u8), 0xF8);
+
+        machine.put_iv(interrupt_source::ALARM);
+        machine.put_iv(interrupt_source::TWO_HZ);
+
+        assert_eq!(machine.io_read(io_reg::RTC_3D as u8), 0x00);
+        machine.io_write(io_reg::RTC_IDX as u8, ext_reg::INT_CLEAR as u8);
+        machine.io_write(io_reg::RTC_DATA as u8, 0x01);
+        assert_eq!(machine.io_read(io_reg::RTC_3D as u8), 0x10);
+        machine.io_write(io_reg::RTC_DATA as u8, 0x02);
+        assert!(machine.iv_queue.is_empty());
+        assert_eq!(machine.io_read(io_reg::RTC_3D as u8), 0xF8);
+    }
+
+    #[test]
+    fn first_frame_of_each_second_resets_firmware_sleep_counter() {
+        let mut machine = empty_machine();
+        machine.frame_phase = 1;
         machine.ram[AUTO_SLEEP_COUNTER_ADDR] = 48;
 
-        machine.end_of_frame(&mut cpu);
+        machine.begin_frame();
+        assert_eq!(machine.ram[AUTO_SLEEP_COUNTER_ADDR], 48);
 
+        machine.frame_phase = 0;
+        machine.begin_frame();
         assert_eq!(machine.ram[AUTO_SLEEP_COUNTER_ADDR], 0);
     }
 
     #[test]
-    fn uses_nc3000_clock_rate_for_video_frames() {
+    fn uses_reference_cycle_budget_for_video_frames() {
         let mut machine = empty_machine();
 
-        assert_eq!(machine.cycles_per_frame(), CPU_CYCLES_LOW_SPEED);
+        assert_eq!(machine.cycles_per_frame(), CPU_CYCLES_PER_FRAME);
         machine.io[io_reg::CLOCK_CTRL] = 0x20;
-        assert_eq!(machine.cycles_per_frame(), CPU_CYCLES_HIGH_SPEED);
+        assert_eq!(machine.cycles_per_frame(), CPU_CYCLES_PER_FRAME);
     }
 
     #[test]
@@ -2065,9 +2136,9 @@ mod tests {
         assert!(!machine.is_clk_off(), "clock should be restored");
         assert!(!machine.do_warm_reset);
 
-        let (min_nonzero, max_changed) = measure_sustained_screen(&mut machine, &mut cpu);
+        let (min_nonzero, changed_frames) = measure_sustained_screen(&mut machine, &mut cpu);
         assert!(min_nonzero > 50, "power wake did not keep visible content");
-        assert!(max_changed < 200_000, "power wake screen kept flickering");
+        assert!(changed_frames <= 8, "power wake screen kept flickering");
     }
 
     #[test]
@@ -2082,12 +2153,12 @@ mod tests {
         cpu.reset(machine.peek_u16(crate::cpu::RESET_VECTOR));
 
         preserve_nand_at_first_boot(&mut machine, &mut cpu);
-        let (min_nonzero, max_changed) = measure_sustained_screen(&mut machine, &mut cpu);
+        let (min_nonzero, changed_frames) = measure_sustained_screen(&mut machine, &mut cpu);
         assert!(
             min_nonzero > 50,
             "preserve path did not keep visible content"
         );
-        assert!(max_changed < 200_000, "preserve path kept flickering");
+        assert!(changed_frames <= 8, "preserve path kept flickering");
     }
 
     #[test]
@@ -2101,10 +2172,10 @@ mod tests {
         let mut cpu = Cpu::new();
         cpu.reset(machine.peek_u16(crate::cpu::RESET_VECTOR));
 
-        confirm_first_boot(&mut machine, &mut cpu, (5 << 3) | 4);
-        let (min_nonzero, max_changed) = measure_sustained_screen(&mut machine, &mut cpu);
+        clear_nand_at_first_boot(&mut machine, &mut cpu);
+        let (min_nonzero, changed_frames) = measure_sustained_screen(&mut machine, &mut cpu);
         assert!(min_nonzero > 50, "clear path did not keep visible content");
-        assert!(max_changed < 200_000, "clear path kept flickering");
+        assert!(changed_frames <= 8, "clear path kept flickering");
     }
 
     #[test]
@@ -2121,12 +2192,7 @@ mod tests {
         // The firmware draws the clock screen before entering standby.
         let mut max_nonzero = 0;
         for _ in 0..150 {
-            let mut acc = 0u64;
-            let target = machine.cycles_per_frame();
-            while acc < target {
-                acc += machine.step(&mut cpu);
-            }
-            machine.end_of_frame(&mut cpu);
+            run_frame(&mut machine, &mut cpu);
             let nz = machine
                 .lcd
                 .framebuffer_raw()
