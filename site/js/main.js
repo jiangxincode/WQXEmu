@@ -1,12 +1,15 @@
 // ===== Internationalization =====
 const translations = {
     zh: {
+        pageTitle: 'WQXEmu - 文曲星电子词典模拟器',
         skipToContent: '跳转到主要内容',
         navModels: '机型',
         navFeatures: '特性',
         navArchitecture: '架构',
         navQuickStart: '快速开始',
         heroBadge: 'Rust 编写 · 低级仿真',
+        heroCalligraphy: '文曲星',
+        heroSubtitle: '模拟器',
         heroDesc: '以 Rust 编写的文曲星电子词典模拟器，采用低级仿真(LLE)技术运行真实固件。<br>支持 NC1020、PC1000、CC800、NC2000、NC3000 五款经典机型。',
         btnDownload: '下载',
         btnSource: '源码',
@@ -72,15 +75,19 @@ const translations = {
         linksTitle: '相关链接',
         linkReleases: '发布版本',
         linkCI: 'CI 构建',
+        footerText: 'WQXEmu — 文曲星电子词典模拟器',
         footerLicense: '采用 GNU 通用公共许可证 v3.0 或更高版本授权'
     },
     en: {
+        pageTitle: 'WQXEmu - Wenquxing Emulator',
         skipToContent: 'Skip to main content',
         navModels: 'Models',
         navFeatures: 'Features',
         navArchitecture: 'Architecture',
         navQuickStart: 'Quick Start',
         heroBadge: 'Written in Rust · Low-Level Emulation',
+        heroCalligraphy: 'Wenquxing',
+        heroSubtitle: 'Emulator',
         heroDesc: 'A Wenquxing electronic dictionary emulator written in Rust, using Low-Level Emulation (LLE) to run real firmware.<br>Supports NC1020, PC1000, CC800, NC2000, and NC3000 models.',
         btnDownload: 'Download',
         btnSource: 'Source',
@@ -146,6 +153,7 @@ const translations = {
         linksTitle: 'Related Links',
         linkReleases: 'Releases',
         linkCI: 'CI Builds',
+        footerText: 'WQXEmu — Wenquxing Electronic Dictionary Emulator',
         footerLicense: 'Licensed under the GNU General Public License v3.0 or later'
     }
 };
@@ -156,6 +164,13 @@ function setLanguage(lang) {
     currentLang = lang;
     document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
 
+    // Update page title
+    const pageTitle = document.getElementById('pageTitle');
+    if (pageTitle && translations[lang].pageTitle) {
+        pageTitle.textContent = translations[lang].pageTitle;
+    }
+
+    // Update all elements with data-i18n attribute
     document.querySelectorAll('[data-i18n]').forEach(el => {
         const key = el.getAttribute('data-i18n');
         if (translations[lang][key]) {

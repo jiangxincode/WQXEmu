@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WQXEmu - 文曲星电子词典模拟器</title>
+    <title id="pageTitle">WQXEmu - 文曲星电子词典模拟器</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>星</text></svg>">
     <link rel="stylesheet" href="css/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -32,12 +32,12 @@
                     </svg>
                     GitHub
                 </a>
-                <button class="lang-toggle" id="langToggle" aria-label="切换语言">
+                <button class="lang-toggle" id="langToggle" aria-label="Toggle language">
                     <span class="lang-zh">中</span>
                     <span class="lang-en">EN</span>
                 </button>
             </div>
-            <button class="nav-mobile-toggle" id="mobileToggle" aria-label="菜单">
+            <button class="nav-mobile-toggle" id="mobileToggle" aria-label="Menu">
                 <span></span>
                 <span></span>
                 <span></span>
@@ -54,8 +54,8 @@
                 <span data-i18n="heroBadge">Rust 编写 · 低级仿真</span>
             </div>
             <h1 class="hero-title">
-                <span class="title-calligraphy">文曲星</span>
-                <span class="title-sub">模拟器</span>
+                <span class="title-calligraphy" data-i18n="heroCalligraphy">文曲星</span>
+                <span class="title-sub" data-i18n="heroSubtitle">模拟器</span>
             </h1>
             <p class="hero-desc" data-i18n="heroDesc">
                 以 Rust 编写的文曲星电子词典模拟器，采用低级仿真(LLE)技术运行真实固件。<br>
@@ -488,7 +488,7 @@ cargo run --release -- \
             <div class="footer-content">
                 <p class="footer-text">
                     <span class="footer-logo">星</span>
-                    WQXEmu — 文曲星电子词典模拟器
+                    <span data-i18n="footerText">WQXEmu — 文曲星电子词典模拟器</span>
                 </p>
                 <p class="footer-license" data-i18n="footerLicense">
                     采用 GNU 通用公共许可证 v3.0 或更高版本授权
