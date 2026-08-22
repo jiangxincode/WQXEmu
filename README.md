@@ -123,10 +123,7 @@ crates/
         └── lib.rs             # libretro API implementation
 ```
 
-For detailed architecture information, see:
-- [ARCHITECTURE.md](docs/ARCHITECTURE.md) — Overall architecture and model implementations
-- [MEMORY-MAP.md](docs/MEMORY-MAP.md) — Memory map and bank switching
-- [IO-REGISTERS.md](docs/IO-REGISTERS.md) — IO register reference
+For detailed architecture information, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Key Mappings (Standalone)
 
